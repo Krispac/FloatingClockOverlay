@@ -34,10 +34,13 @@ hdiutil create -volname $APP -srcfolder "$OUT/dmg" -ov -format UDZO "$OUT/$APP.d
 ditto -c -k --sequesterRsrc --keepParent "$OUT/dmg/$APP.app" "$OUT/$APP-macOS.zip"
 
 echo "→ Waiting for the Windows build of $COMMIT"
+# A push only triggers the Windows build when Windows files changed; start one otherwise.
+find_run() { gh run list --workflow windows-build.yml --commit "$COMMIT" --json databaseId -q '.[0].databaseId' || true; }
 RUN=""
-for _ in $(seq 1 30); do
-  RUN=$(gh run list --workflow windows-build.yml --commit "$COMMIT" --json databaseId -q '.[0].databaseId' || true)
+for i in $(seq 1 30); do
+  RUN=$(find_run)
   [ -n "$RUN" ] && break
+  [ "$i" = 3 ] && gh workflow run windows-build.yml --ref "$(git rev-parse --abbrev-ref HEAD)"
   sleep 10
 done
 [ -n "$RUN" ] || { echo "Windows build did not start"; exit 1; }
