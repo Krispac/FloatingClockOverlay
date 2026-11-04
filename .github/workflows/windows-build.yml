@@ -58,6 +58,7 @@ jobs:
           if (-not $sw) { Write-Error "Settings window did not open"; exit 1 }
           Write-Host "Settings window OK"
           Stop-Process $p
+          Wait-Process -Id $p.Id -Timeout 15 -ErrorAction SilentlyContinue
 
       - name: Updater test (fake 9.9.9 update, click Update Now)
         shell: pwsh
@@ -69,6 +70,8 @@ jobs:
           '{"windows":{"version":"9.9.9","url":"http://127.0.0.1:8799/FloatingClockOverlay.exe","sha256":"' + $sha + '","notes":"CI test"}}' | Set-Content upd/srv/update.json
           $srv = Start-Process python -ArgumentList "-m","http.server","8799","--bind","127.0.0.1","--directory","upd/srv" -PassThru
           Get-Process FloatingClockOverlay -ErrorAction SilentlyContinue | Stop-Process -Force
+          Get-Process FloatingClockOverlay -ErrorAction SilentlyContinue | Wait-Process -Timeout 15
+          Start-Sleep -Seconds 2
           $env:FCO_UPDATE_MANIFEST = "http://127.0.0.1:8799/update.json"
           $env:FCO_ALLOW_CAPTURE = "1"
           $app = Start-Process (Resolve-Path upd/app/FloatingClockOverlay.exe) -PassThru
