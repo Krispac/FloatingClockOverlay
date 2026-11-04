@@ -8,6 +8,14 @@ public static class Strings
     {
         ["es"] = new()
         {
+            ["Settings…"] = "Configuración…",
+            ["Floating Clock Overlay Settings"] = "Configuración de Floating Clock Overlay",
+            ["CLOCK"] = "RELOJ",
+            ["WINDOW"] = "VENTANA",
+            ["GENERAL"] = "GENERAL",
+            ["Show Overlay"] = "Mostrar reloj",
+            ["Switches the text between white and black to match what's behind the clock"] = "Cambia el texto entre blanco y negro según lo que haya detrás del reloj",
+            ["Quit Floating Clock Overlay"] = "Salir de Floating Clock Overlay",
             ["Check for Updates"] = "Buscar actualizaciones",
             ["Automatically Check for Updates"] = "Buscar actualizaciones automáticamente",
             ["Update available"] = "Actualización disponible",
@@ -34,6 +42,14 @@ public static class Strings
         },
         ["ar"] = new()
         {
+            ["Settings…"] = "الإعدادات…",
+            ["Floating Clock Overlay Settings"] = "إعدادات Floating Clock Overlay",
+            ["CLOCK"] = "الساعة",
+            ["WINDOW"] = "النافذة",
+            ["GENERAL"] = "عام",
+            ["Show Overlay"] = "إظهار الساعة",
+            ["Switches the text between white and black to match what's behind the clock"] = "يبدّل لون النص بين الأبيض والأسود حسب ما خلف الساعة",
+            ["Quit Floating Clock Overlay"] = "إنهاء Floating Clock Overlay",
             ["Check for Updates"] = "التحقق من التحديثات",
             ["Automatically Check for Updates"] = "التحقق من التحديثات تلقائيًا",
             ["Update available"] = "يتوفر تحديث",
@@ -60,6 +76,14 @@ public static class Strings
         },
         ["hi"] = new()
         {
+            ["Settings…"] = "सेटिंग्स…",
+            ["Floating Clock Overlay Settings"] = "Floating Clock Overlay सेटिंग्स",
+            ["CLOCK"] = "घड़ी",
+            ["WINDOW"] = "विंडो",
+            ["GENERAL"] = "सामान्य",
+            ["Show Overlay"] = "घड़ी दिखाएं",
+            ["Switches the text between white and black to match what's behind the clock"] = "घड़ी के पीछे के हिसाब से टेक्स्ट सफ़ेद या काला करता है",
+            ["Quit Floating Clock Overlay"] = "Floating Clock Overlay बंद करें",
             ["Check for Updates"] = "अपडेट जांचें",
             ["Automatically Check for Updates"] = "अपडेट अपने-आप जांचें",
             ["Update available"] = "अपडेट उपलब्ध है",

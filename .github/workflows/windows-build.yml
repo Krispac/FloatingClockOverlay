@@ -44,6 +44,19 @@ jobs:
           $count = @(Get-Process FloatingClockOverlay -ErrorAction SilentlyContinue).Count
           if (-not $second.HasExited -or $count -ne 1) { Write-Error "Second launch did not exit ($count running)"; exit 1 }
           Write-Host "Single instance OK"
+          Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes
+          $tray = Start-Process publish/FloatingClockOverlay.exe -PassThru
+          $tray.WaitForExit(15000) | Out-Null
+          $root = [System.Windows.Automation.AutomationElement]::RootElement
+          $c = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "Floating Clock Overlay Settings")
+          $sw = $null
+          for ($i = 0; $i -lt 15 -and -not $sw; $i++) { Start-Sleep 1; $sw = $root.FindFirst([System.Windows.Automation.TreeScope]::Children, $c) }
+          $b2 = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp2 = New-Object System.Drawing.Bitmap $b2.Width, $b2.Height
+          [System.Drawing.Graphics]::FromImage($bmp2).CopyFromScreen($b2.Location, [System.Drawing.Point]::Empty, $b2.Size)
+          $bmp2.Save("settings.png")
+          if (-not $sw) { Write-Error "Settings window did not open"; exit 1 }
+          Write-Host "Settings window OK"
           Stop-Process $p
 
       - name: Updater test (fake 9.9.9 update, click Update Now)
@@ -90,6 +103,7 @@ jobs:
           name: smoke-screenshot
           path: |
             smoke.png
+            settings.png
             update-popup.png
 
       - uses: actions/upload-artifact@v4

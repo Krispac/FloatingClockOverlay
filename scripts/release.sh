@@ -20,7 +20,7 @@ echo "→ Setting version $VERSION"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${VERSION//./}" $APP/Info.plist
 sed -i '' "s#<Version>.*</Version>#<Version>$VERSION</Version>#" $APP-Windows/$APP/$APP.csproj
 git add $APP/Info.plist $APP-Windows/$APP/$APP.csproj
-git commit -m "Release $TAG" >/dev/null
+git diff --cached --quiet || git commit -m "Release $TAG" >/dev/null
 git push -q origin HEAD
 COMMIT=$(git rev-parse HEAD)
 
@@ -31,6 +31,7 @@ ditto "$OUT/$APP.xcarchive/Products/Applications/$APP.app" "$OUT/dmg/$APP.app"
 codesign --force --deep --preserve-metadata=entitlements,flags,identifier --sign "$SIGN_ID" "$OUT/dmg/$APP.app"
 ln -s /Applications "$OUT/dmg/Applications"
 hdiutil create -volname $APP -srcfolder "$OUT/dmg" -ov -format UDZO "$OUT/$APP.dmg" >/dev/null
+ditto -c -k --sequesterRsrc --keepParent "$OUT/dmg/$APP.app" "$OUT/$APP-macOS.zip"
 
 echo "→ Waiting for the Windows build of $COMMIT"
 RUN=""
@@ -44,7 +45,9 @@ gh run watch "$RUN" --exit-status >/dev/null
 gh run download "$RUN" -n $APP-Windows -D "$OUT/win"
 
 echo "→ Publishing $TAG"
-gh release create "$TAG" "$OUT/$APP.dmg" "$OUT/win/$APP.exe" --title "$TAG" --notes "$NOTES"
+(cd "$OUT/win" && zip -q "../$APP-Windows.zip" "$APP.exe")
+gh release create "$TAG" "$OUT/$APP.dmg" "$OUT/$APP-macOS.zip" "$OUT/win/$APP.exe" "$OUT/$APP-Windows.zip" \
+  --title "$TAG" --notes "$NOTES"
 echo "$NOTES" > "$OUT/notes.txt"
 
 echo

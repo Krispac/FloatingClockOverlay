@@ -224,6 +224,11 @@ public partial class ClockWindow : Window
 
     private void Border_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (e.ClickCount == 2)
+        {
+            SettingsWindow.ShowFor(this);
+            return;
+        }
         if (e.ButtonState == MouseButtonState.Pressed)
         {
             DragMove();

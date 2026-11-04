@@ -176,7 +176,7 @@ public static class Updater
             throw new Exception(T("Couldn't prepare the update."));
         }
 
-        Process.Start(new ProcessStartInfo(current) { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo(current, "--after-update") { UseShellExecute = true });
         Application.Current.Shutdown();
     }
 }

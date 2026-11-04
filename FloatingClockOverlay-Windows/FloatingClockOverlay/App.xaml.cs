@@ -7,7 +7,7 @@ namespace FloatingClockOverlay;
 
 public partial class App : System.Windows.Application
 {
-    private static readonly (string Code, string Name)[] Languages =
+    internal static readonly (string Code, string Name)[] Languages =
     {
         ("en", "English"), ("es", "Español"), ("ar", "العربية"), ("hi", "हिन्दी"),
         ("bn", "বাংলা"), ("fr", "Français"), ("de", "Deutsch"), ("ja", "日本語"),
@@ -33,7 +33,7 @@ public partial class App : System.Windows.Application
 
         try
         {
-            Start();
+            Start(e.Args.Contains("--after-update"));
         }
         catch (Exception ex)
         {
@@ -55,23 +55,42 @@ public partial class App : System.Windows.Application
         System.Windows.MessageBox.Show(text, "Floating Clock Overlay crashed", MessageBoxButton.OK, MessageBoxImage.Error);
     }
 
-    // One clock at a time. A copy started by the updater waits briefly for the old
-    // one to exit; a second manual launch gives up and leaves the running clock alone.
-    private static bool AcquireSingleInstance()
+    private const string OpenSettingsEventName = "FloatingClockOverlay.OpenSettings";
+
+    // One clock at a time. A copy started by the updater waits for the old one to
+    // exit; opening the app again while it runs brings up its Settings instead.
+    private static bool AcquireSingleInstance(bool afterUpdate)
     {
         _singleInstance = new Mutex(true, "FloatingClockOverlay.SingleInstance", out bool created);
         if (created) return true;
+        if (!afterUpdate)
+        {
+            try { EventWaitHandle.OpenExisting(OpenSettingsEventName).Set(); } catch { }
+            return false;
+        }
         try { return _singleInstance.WaitOne(TimeSpan.FromSeconds(10)); }
         catch (AbandonedMutexException) { return true; }
     }
 
-    private void Start()
+    private void ListenForOpenSettings()
     {
-        if (!AcquireSingleInstance())
+        var signal = new EventWaitHandle(false, EventResetMode.AutoReset, OpenSettingsEventName);
+        var thread = new Thread(() =>
+        {
+            while (signal.WaitOne())
+                Dispatcher.BeginInvoke(() => { if (_clockWindow != null) SettingsWindow.ShowFor(_clockWindow); });
+        }) { IsBackground = true };
+        thread.Start();
+    }
+
+    private void Start(bool afterUpdate)
+    {
+        if (!AcquireSingleInstance(afterUpdate))
         {
             Shutdown();
             return;
         }
+        ListenForOpenSettings();
         Updater.CleanUpPreviousUpdate();
         _clockWindow = new ClockWindow();
         _clockWindow.Show();
@@ -85,6 +104,11 @@ public partial class App : System.Windows.Application
         };
 
         var menu = new Forms.ContextMenuStrip();
+
+        var openSettings = new Forms.ToolStripMenuItem(T("Settings…")) { Font = new System.Drawing.Font(menu.Font, System.Drawing.FontStyle.Bold) };
+        openSettings.Click += (_, _) => { if (_clockWindow != null) SettingsWindow.ShowFor(_clockWindow); };
+        menu.Items.Add(openSettings);
+        menu.Items.Add(new Forms.ToolStripSeparator());
 
         var showHide = new Forms.ToolStripMenuItem(T("Show/Hide"));
         showHide.Click += (_, _) => _clockWindow?.ToggleVisibility();
@@ -146,7 +170,7 @@ public partial class App : System.Windows.Application
         };
 
         _trayIcon.ContextMenuStrip = menu;
-        _trayIcon.DoubleClick += (_, _) => _clockWindow?.ToggleVisibility();
+        _trayIcon.DoubleClick += (_, _) => { if (_clockWindow != null) SettingsWindow.ShowFor(_clockWindow); };
         Updater.StartAutomaticChecks(s);
     }
 
