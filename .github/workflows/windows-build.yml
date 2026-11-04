@@ -84,7 +84,13 @@ jobs:
           $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
           [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
           $bmp.Save("update-popup.png")
-          if (-not $btn) { Write-Error "Update pop-up never appeared"; exit 1 }
+          if (-not $btn) {
+            Get-CimInstance Win32_Process -Filter "Name='FloatingClockOverlay.exe'" | Select-Object ProcessId, CommandLine | Format-List | Out-String | Write-Host
+            Write-Host "app exited: $($app.HasExited) code: $($app.ExitCode)"
+            Get-Content "$env:APPDATA/FloatingClockOverlay/settings.json" -ErrorAction SilentlyContinue | Write-Host
+            Get-Content "$env:APPDATA/FloatingClockOverlay/crash.log" -ErrorAction SilentlyContinue | Write-Host
+            Write-Error "Update pop-up never appeared"; exit 1
+          }
           Write-Host "Pop-up found, clicking Update Now"
           $btn.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
           $app.WaitForExit(30000) | Out-Null
