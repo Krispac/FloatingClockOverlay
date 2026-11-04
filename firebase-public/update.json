@@ -1,0 +1,14 @@
+{
+  "mac": {
+    "version": "1.4.0",
+    "url": "https://github.com/yousabinsadeque/FloatingClockOverlay/releases/download/v1.4.0/FloatingClockOverlay.dmg",
+    "sha256": "974c1ae38429221b1afce61d6ce8d5ec07666c416b62d592215ef0650102c69d",
+    "notes": "New: update pop-up with one-click install, reorganized Settings with a Quick bar, a Settings window on Windows, and DVD bounce returns the clock to its spot. Fixes for adaptive color, multi-monitor positions and restarts."
+  },
+  "windows": {
+    "version": "1.4.0",
+    "url": "https://github.com/yousabinsadeque/FloatingClockOverlay/releases/download/v1.4.0/FloatingClockOverlay.exe",
+    "sha256": "4ca1d18e35bcbd90f98a566ce86143fc4cf234bd35a7f3c609286e555d9d638f",
+    "notes": "New: update pop-up with one-click install, reorganized Settings with a Quick bar, a Settings window on Windows, and DVD bounce returns the clock to its spot. Fixes for adaptive color, multi-monitor positions and restarts."
+  }
+}
