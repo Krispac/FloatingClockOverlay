@@ -172,6 +172,7 @@ public partial class App : System.Windows.Application
         _trayIcon.ContextMenuStrip = menu;
         _trayIcon.DoubleClick += (_, _) => { if (_clockWindow != null) SettingsWindow.ShowFor(_clockWindow); };
         Updater.StartAutomaticChecks(s);
+        InstallTracker.TrackFirstLaunchIfNeeded(s);
     }
 
     private Forms.ToolStripMenuItem Toggle(string label, Func<bool> get, Action<bool> set)

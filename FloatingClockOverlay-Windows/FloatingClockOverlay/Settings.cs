@@ -15,6 +15,8 @@ public class Settings
     public string ClockLanguage { get; set; } = "";
     public bool AutoCheckUpdates { get; set; } = true;
     public string SkippedVersion { get; set; } = "";
+    public string InstallId { get; set; } = "";
+    public bool InstallTracked { get; set; }
 
     private static readonly string Dir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FloatingClockOverlay");

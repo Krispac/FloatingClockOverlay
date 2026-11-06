@@ -24,6 +24,7 @@ enum InstallTracker {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let payload: [String: Any] = [
+            "p": "mac",
             "v": version,
             "b": build,
             "os": os,
