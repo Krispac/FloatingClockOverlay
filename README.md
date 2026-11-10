@@ -24,7 +24,7 @@ A polished, transparent always-on-top clock overlay for macOS — built with Swi
 - **AM/PM toggle** with uppercase/lowercase style options
 - **4 size presets:** Small, Medium, Large, Extra Large + free resize
 - **Timer** and **Stopwatch** modes with lap support
-- Optional low meditation gong when the timer or break ends
+- Optional pair of low meditation gong strikes, 10 seconds apart, when the timer or break ends
 - Click-to-start break after the timer, with pause/resume and a 5-minute default
 - Silent macOS notification when the countdown timer finishes
 - **Adaptive Color** — auto-adjusts text color based on background brightness

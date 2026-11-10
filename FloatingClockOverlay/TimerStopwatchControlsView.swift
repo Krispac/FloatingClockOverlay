@@ -55,7 +55,7 @@ struct TimerStopwatchControlsView: View {
             ToggleRow(icon: "speaker.wave.2",
                       label: "Completion Gong",
                       value: $settings.timerSoundEnabled,
-                      hint: "Low gong when the timer or break ends")
+                      hint: "Two low gong strikes, 10 seconds apart")
 
             // Buttons
             HStack(spacing: 8) {

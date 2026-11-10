@@ -235,14 +235,15 @@ final class TimeController: ObservableObject {
 
 // MARK: - Gentle meditation gong
 
-// One low, warm yoga-room gong (A2) built from a soft fundamental, a slowly
-// beating twin and a few quietly decaying partials. It is synthesised once in
-// memory, so the app carries no audio asset and nothing depends on the system
-// alert sounds.
+// Two low, warm yoga-room gong strikes (A2) separated by ten seconds. Each
+// strike is built from a soft fundamental, a slowly beating twin and a few
+// quietly decaying partials. The sound is synthesised once in memory, so the
+// app carries no audio asset and nothing depends on the system alert sounds.
 final class GentleGong {
     static let shared = GentleGong()
 
     private var sound: NSSound?
+    private var secondStrike: DispatchWorkItem?
     private lazy var audioData = Self.makeWAVData()
 
     private init() {}
@@ -250,6 +251,20 @@ final class GentleGong {
     func play() {
         stop()
         guard ClockSettings.shared.timerSoundEnabled else { return }
+        playStrike()
+
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, ClockSettings.shared.timerSoundEnabled else { return }
+            self.secondStrike = nil
+            self.playStrike()
+        }
+        secondStrike = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: work)
+    }
+
+    private func playStrike() {
+        guard ClockSettings.shared.timerSoundEnabled else { return }
+        sound?.stop()
         guard let sound = NSSound(data: audioData) else { return }
         sound.volume = 0.48
         sound.play()
@@ -257,6 +272,8 @@ final class GentleGong {
     }
 
     func stop() {
+        secondStrike?.cancel()
+        secondStrike = nil
         sound?.stop()
         sound = nil
     }
