@@ -73,6 +73,17 @@ make clean          # wipe build artefacts
 make open-xcode     # open the Xcode project
 ```
 
+### Local release routine (this fork)
+
+Keep the workspace disposable — the source history is the rollback.
+
+- Build and smoke-test in `/tmp` (separate derived data, copies with a unique
+  bundle ID); never test on the installed app.
+- Do not keep `.app` backups in `~/Applications`. Roll back by checking out the
+  previous commit and rebuilding.
+- After deploying, remove temp build dirs, test copies and DerivedData, then
+  commit and push so the deployed state is reproducible from `main`.
+
 ---
 
 ## Using the App
