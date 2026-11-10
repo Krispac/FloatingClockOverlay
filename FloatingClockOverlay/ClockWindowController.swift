@@ -758,7 +758,7 @@ class ClockWindow: NSWindow {
             case .idle:     tc.timerStart()
             case .running:  tc.timerPause()
             case .paused:   tc.timerStart()
-            case .finished: tc.timerReset(); tc.timerStart()
+            case .finished: tc.timerReset()
             }
         case .stopwatch:
             switch tc.stopwatchState {
