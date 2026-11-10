@@ -315,9 +315,11 @@ extension ClockTheme {
 
 struct StandByBackground: View {
     var cornerRadius: Double
+    var paneCount: Int = 1
 
     var body: some View {
         let cr = max(8, cornerRadius)
+        let count = max(1, paneCount)
 
         ZStack {
             RoundedRectangle(cornerRadius: cr, style: .continuous)
@@ -333,17 +335,19 @@ struct StandByBackground: View {
                 )
                 .opacity(0.96)
 
-            RadialGradient(
-                colors: [
-                    Color(hex: "FFB15E").opacity(0.20),
-                    Color(hex: "FFB15E").opacity(0.05),
-                    .clear,
-                ],
-                center: .center,
-                startRadius: 0,
-                endRadius: 150
-            )
-            .clipShape(RoundedRectangle(cornerRadius: cr, style: .continuous))
+            ForEach(0..<count, id: \.self) { index in
+                RadialGradient(
+                    colors: [
+                        Color(hex: "FFB15E").opacity(count == 1 ? 0.20 : 0.17),
+                        Color(hex: "FFB15E").opacity(count == 1 ? 0.05 : 0.04),
+                        .clear,
+                    ],
+                    center: UnitPoint(x: (Double(index) + 0.5) / Double(count), y: 0.5),
+                    startRadius: 0,
+                    endRadius: count == 1 ? 150 : 130
+                )
+                .clipShape(RoundedRectangle(cornerRadius: cr, style: .continuous))
+            }
 
             RoundedRectangle(cornerRadius: cr, style: .continuous)
                 .strokeBorder(

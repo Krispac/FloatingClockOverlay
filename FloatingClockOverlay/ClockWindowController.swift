@@ -15,6 +15,10 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     private var isDVDBouncing = false
     private var isRestoringPosition = true
     private var dvdLastTimestamp: TimeInterval = 0
+    private var lastPrimaryVisible = true
+    private var lastCompanionVisible = false
+    private var isUpdatingPaneLayout = false
+    private var isApplyingProgrammaticFrame = false
 
     init() {
         let window = ClockWindow(
@@ -53,6 +57,8 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         window.maxSize = NSSize(width: 3000, height: 1000)
 
         window.contentView = NSHostingView(rootView: ClockView())
+        lastPrimaryVisible = s.showPrimaryPane
+        lastCompanionVisible = s.isClockCompanionVisible
 
         isRestoringPosition = true
         if s.isFullScreen {
@@ -63,7 +69,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         }
         isRestoringPosition = false
 
-        if s.isVisible { window.orderFrontRegardless() }
+        if s.isVisible && s.visiblePaneCount > 0 { window.orderFrontRegardless() }
         setupBurnInPrevention()
         setupDVDBounce()
     }
@@ -135,7 +141,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func bringToFront() {
-        guard s.isVisible else { return }
+        guard s.isVisible, s.visiblePaneCount > 0 else { return }
         // Small delay so the newly activated app finishes raising its own windows first.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             // orderFrontRegardless bypasses the normal "active app" restriction.
@@ -164,13 +170,22 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] visible in
                 guard let self = self else { return }
-                if visible {
+                if visible && self.s.visiblePaneCount > 0 {
                     self.window?.orderFrontRegardless()
                 } else {
                     self.window?.orderOut(nil)
                 }
             }
             .store(in: &cancellables)
+
+        Publishers.MergeMany(
+            s.$showPrimaryPane.map   { _ in () }.eraseToAnyPublisher(),
+            s.$showClockCompanion.map { _ in () }.eraseToAnyPublisher(),
+            s.$overlayMode.map       { _ in () }.eraseToAnyPublisher()
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] in self?.updatePaneLayout() }
+        .store(in: &cancellables)
 
         s.$isFullScreen
             .receive(on: DispatchQueue.main)
@@ -215,10 +230,14 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
             if savedFrameBeforeFullscreen == nil {
                 savedFrameBeforeFullscreen = window.frame
             }
+            isApplyingProgrammaticFrame = true
             window.setFrame(screen.frame, display: true, animate: animate)
+            isApplyingProgrammaticFrame = false
         } else {
             if let saved = savedFrameBeforeFullscreen {
+                isApplyingProgrammaticFrame = true
                 window.setFrame(saved, display: true, animate: animate)
+                isApplyingProgrammaticFrame = false
                 savedFrameBeforeFullscreen = nil
             } else {
                 applyPreset(s.sizePreset, animate: animate)
@@ -236,16 +255,20 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
             return
         }
 
-        let size: NSSize
+        let paneSize: NSSize
         if preset == .custom {
-            size = NSSize(width: s.customWidth, height: s.customHeight)
+            paneSize = NSSize(width: s.customWidth, height: s.customHeight)
         } else if let ps = preset.contentSize {
-            size = ps
+            paneSize = ps
         } else {
             return
         }
 
+        let count = max(1, s.visiblePaneCount)
+        let size = NSSize(width: paneSize.width * CGFloat(count), height: paneSize.height)
+        isApplyingProgrammaticFrame = true
         window.setContentSize(size)
+        isApplyingProgrammaticFrame = false
         if !isRestoringPosition {
             let center = CGPoint(x: window.frame.midX, y: window.frame.midY)
             if let screen = screenContaining(center) ?? nearestScreen(to: center) ?? NSScreen.main {
@@ -257,6 +280,73 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
                 window.setFrameOrigin(frame.origin)
             }
         }
+    }
+
+    // MARK: - Pane Layout
+
+    private var paneSize: NSSize {
+        if s.sizePreset == .custom {
+            return NSSize(width: s.customWidth, height: s.customHeight)
+        }
+        if let ps = s.sizePreset.contentSize {
+            return ps
+        }
+        return NSSize(width: s.customWidth, height: s.customHeight)
+    }
+
+    private func updatePaneLayout() {
+        guard let window = window, !s.isFullScreen else { return }
+
+        let primary = s.showPrimaryPane
+        let companion = s.isClockCompanionVisible
+        let count = s.visiblePaneCount
+
+        if count == 0 {
+            lastPrimaryVisible = false
+            lastCompanionVisible = false
+            window.orderOut(nil)
+            return
+        }
+
+        let pane = paneSize
+        let newWidth = pane.width * CGFloat(count)
+        let oldFrame = window.frame
+        var origin = oldFrame.origin
+
+        // Keep the surviving pane where it was when the other one is closed.
+        if lastPrimaryVisible && lastCompanionVisible {
+            if !primary && companion {
+                // Closing the left pane keeps the clock pane where it was.
+                origin.x += oldFrame.width - newWidth
+            }
+        } else if !lastPrimaryVisible && lastCompanionVisible {
+            if primary && companion {
+                // The primary pane is added on the left; the clock stays in place.
+                origin.x -= pane.width
+            }
+        }
+
+        isUpdatingPaneLayout = true
+        window.setFrame(NSRect(origin: origin, size: NSSize(width: newWidth, height: pane.height)),
+                        display: true)
+        isUpdatingPaneLayout = false
+
+        clampToScreen(window)
+        lastPrimaryVisible = primary
+        lastCompanionVisible = companion
+
+        if s.isVisible { window.orderFrontRegardless() }
+        savePosition()
+    }
+
+    private func clampToScreen(_ window: NSWindow) {
+        let center = CGPoint(x: window.frame.midX, y: window.frame.midY)
+        guard let screen = screenContaining(center) ?? nearestScreen(to: center) else { return }
+        let vf = screen.visibleFrame
+        var frame = window.frame
+        frame.origin.x = min(max(frame.origin.x, vf.minX), vf.maxX - frame.width)
+        frame.origin.y = min(max(frame.origin.y, vf.minY), vf.maxY - frame.height)
+        window.setFrameOrigin(frame.origin)
     }
 
     // MARK: - Position Presets
@@ -517,9 +607,10 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     // MARK: - NSWindowDelegate
 
     func windowDidResize(_ notification: Notification) {
-        guard !s.isFullScreen else { return }
+        guard !s.isFullScreen, !isUpdatingPaneLayout, !isApplyingProgrammaticFrame else { return }
         if let window = window {
-            s.customWidth  = Double(window.frame.width)
+            let paneCount = CGFloat(max(1, s.visiblePaneCount))
+            s.customWidth  = Double(window.frame.width / paneCount)
             s.customHeight = Double(window.frame.height)
             if s.sizePreset != .custom { s.sizePreset = .custom }
         }
@@ -536,17 +627,34 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
 
 class ClockWindow: NSWindow {
     private var pendingSingleClick: DispatchWorkItem?
-    private let resetButtonSize: CGFloat = 16
-    private let resetButtonInset: CGFloat = 14
+    private let controlSize: CGFloat = 16
+    private let controlInset: CGFloat = 8
+    private let controlHitPadding: CGFloat = 4
+
+    private struct PaneHitArea {
+        let frame: NSRect
+        let mode: OverlayMode
+        let isPrimary: Bool
+    }
 
     override func mouseDown(with event: NSEvent) {
         let loc = event.locationInWindow
+        let pane = paneHitArea(at: loc)
 
-        if isResetButtonVisible && resetButtonRect.contains(loc) {
+        if let pane = pane, closeRect(for: pane).contains(loc) {
             if event.clickCount == 1 {
                 pendingSingleClick?.cancel()
                 pendingSingleClick = nil
-                resetCurrentMode()
+                closePane(pane)
+            }
+            return
+        }
+
+        if let pane = pane, pane.mode != .clock, resetRect(for: pane).contains(loc) {
+            if event.clickCount == 1 {
+                pendingSingleClick?.cancel()
+                pendingSingleClick = nil
+                resetPane(pane)
             }
             return
         }
@@ -570,22 +678,55 @@ class ClockWindow: NSWindow {
 
         let startOrigin = frame.origin
         performDrag(with: event)
-        scheduleSingleClick(from: startOrigin)
+        scheduleSingleClick(from: startOrigin, togglesTimer: pane?.isPrimary == true)
     }
 
-    private var isResetButtonVisible: Bool {
-        ClockSettings.shared.overlayMode != .clock
+    // Pane order matches ClockView.panes: primary first, clock companion second.
+    private var paneHitAreas: [PaneHitArea] {
+        let settings = ClockSettings.shared
+        var panes: [(OverlayMode, Bool)] = []
+        if settings.showPrimaryPane {
+            panes.append((settings.overlayMode, true))
+        }
+        if settings.isClockCompanionVisible {
+            panes.append((.clock, false))
+        }
+        guard !panes.isEmpty else { return [] }
+
+        let width = frame.width / CGFloat(panes.count)
+        return panes.enumerated().map { index, pane in
+            PaneHitArea(
+                frame: NSRect(x: CGFloat(index) * width, y: 0,
+                              width: width, height: frame.height),
+                mode: pane.0,
+                isPrimary: pane.1
+            )
+        }
     }
 
-    private var resetButtonRect: NSRect {
-        NSRect(x: frame.width - resetButtonInset - resetButtonSize,
-               y: frame.height - resetButtonInset - resetButtonSize,
-               width: resetButtonSize,
-               height: resetButtonSize)
+    private func paneHitArea(at point: NSPoint) -> PaneHitArea? {
+        paneHitAreas.first { $0.frame.contains(point) }
     }
 
-    private func scheduleSingleClick(from startOrigin: NSPoint) {
+    private func closeRect(for pane: PaneHitArea) -> NSRect {
+        NSRect(x: pane.frame.maxX - controlInset - controlSize,
+               y: pane.frame.maxY - controlInset - controlSize,
+               width: controlSize,
+               height: controlSize)
+            .insetBy(dx: -controlHitPadding, dy: -controlHitPadding)
+    }
+
+    private func resetRect(for pane: PaneHitArea) -> NSRect {
+        NSRect(x: pane.frame.maxX - controlInset - controlSize,
+               y: pane.frame.minY + controlInset,
+               width: controlSize,
+               height: controlSize)
+            .insetBy(dx: -controlHitPadding, dy: -controlHitPadding)
+    }
+
+    private func scheduleSingleClick(from startOrigin: NSPoint, togglesTimer: Bool) {
         pendingSingleClick?.cancel()
+        guard togglesTimer else { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.pendingSingleClick = nil
@@ -598,6 +739,15 @@ class ClockWindow: NSWindow {
         pendingSingleClick = work
         DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval,
                                       execute: work)
+    }
+
+    private func closePane(_ pane: PaneHitArea) {
+        let settings = ClockSettings.shared
+        if pane.isPrimary {
+            settings.showPrimaryPane = false
+        } else {
+            settings.showClockCompanion = false
+        }
     }
 
     private func toggleTimerOrStopwatch() {
@@ -621,9 +771,9 @@ class ClockWindow: NSWindow {
         }
     }
 
-    private func resetCurrentMode() {
+    private func resetPane(_ pane: PaneHitArea) {
         let tc = TimeController.shared
-        switch ClockSettings.shared.overlayMode {
+        switch pane.mode {
         case .timer:     tc.timerReset()
         case .stopwatch: tc.stopwatchReset()
         case .clock:     break

@@ -27,6 +27,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var swResetItem:       NSMenuItem?
     private var themeMenuItem:     NSMenuItem?
     private var sizeMenuItem:      NSMenuItem?
+    private var primaryPaneItem:   NSMenuItem?
+    private var clockPaneItem:     NSMenuItem?
 
     // MARK: - Lifecycle
 
@@ -150,6 +152,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         sizeMenuItem = sizeItem
         menu.addItem(sizeItem)
 
+        // ── Panels submenu ────────────────────────────────────────────────
+        let panelsItem = NSMenuItem(title: NSLocalizedString("Panels", comment: ""), action: nil, keyEquivalent: "")
+        panelsItem.submenu = buildPanelsMenu()
+        menu.addItem(panelsItem)
+
         // ── Mode submenu ──────────────────────────────────────────────────
         let modeItem = NSMenuItem(title: NSLocalizedString("Mode", comment: ""), action: nil, keyEquivalent: "")
         modeItem.submenu = buildModeMenu()
@@ -206,6 +213,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return m
     }
 
+    private func buildPanelsMenu() -> NSMenu {
+        let m = NSMenu()
+        let primary = NSMenuItem(title: NSLocalizedString("Timer Pane", comment: ""),
+                                 action: #selector(togglePrimaryPane), keyEquivalent: "")
+        let clock = NSMenuItem(title: NSLocalizedString("Side Clock Pane", comment: ""),
+                               action: #selector(toggleClockPane), keyEquivalent: "")
+        primary.target = self
+        clock.target = self
+        primaryPaneItem = primary
+        clockPaneItem = clock
+        m.addItem(primary)
+        m.addItem(clock)
+        return m
+    }
+
     private func buildModeMenu() -> NSMenu {
         let m = NSMenu()
         let ci = NSMenuItem(title: NSLocalizedString("Clock", comment: ""),     action: #selector(setModeClock),     keyEquivalent: "")
@@ -222,13 +244,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let s  = ClockSettings.shared
         let tc = TimeController.shared
 
-        showHideItem?.title      = s.isVisible      ? NSLocalizedString("Hide Overlay", comment: "") : NSLocalizedString("Show Overlay", comment: "")
+        let overlayShown = s.isVisible && s.visiblePaneCount > 0
+        showHideItem?.title      = overlayShown     ? NSLocalizedString("Hide Overlay", comment: "") : NSLocalizedString("Show Overlay", comment: "")
         clickThroughItem?.title  = s.isClickThrough ? NSLocalizedString("Click-Through: ON ✓", comment: "") : NSLocalizedString("Click-Through: OFF", comment: "")
         launchAtLoginItem?.state = s.launchAtLogin  ? .on                   : .off
 
         clockModeItem?.state     = s.overlayMode == .clock     ? .on : .off
         timerModeItem?.state     = s.overlayMode == .timer     ? .on : .off
         stopwatchModeItem?.state = s.overlayMode == .stopwatch ? .on : .off
+
+        primaryPaneItem?.title   = primaryPaneLabel(for: s.overlayMode)
+        primaryPaneItem?.state   = s.showPrimaryPane ? .on : .off
+        clockPaneItem?.state     = s.isClockCompanionVisible ? .on : .off
+        clockPaneItem?.isEnabled = s.overlayMode != .clock
 
         let inTimer = s.overlayMode == .timer
         timerStartItem?.isEnabled = inTimer
@@ -272,7 +300,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         settingsWindowController?.show()
     }
 
-    @objc private func toggleVisibility()    { ClockSettings.shared.isVisible.toggle() }
+    @objc private func toggleVisibility() {
+        let s = ClockSettings.shared
+        if s.visiblePaneCount == 0 {
+            s.showPrimaryPane = true
+            s.isVisible = true
+        } else {
+            s.isVisible.toggle()
+        }
+    }
     @objc private func toggleClickThrough()  { ClockSettings.shared.isClickThrough.toggle() }
     @objc private func resetPosition() {
         NotificationCenter.default.post(name: .moveToPreset, object: ClockSettings.PositionPreset.reset)
@@ -293,9 +329,37 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             ClockSettings.shared.sizePreset = p
         }
     }
-    @objc private func setModeClock()     { ClockSettings.shared.overlayMode = .clock }
-    @objc private func setModeTimer()     { ClockSettings.shared.overlayMode = .timer }
-    @objc private func setModeStopwatch() { ClockSettings.shared.overlayMode = .stopwatch }
+    @objc private func setModeClock()     { selectMode(.clock) }
+    @objc private func setModeTimer()     { selectMode(.timer) }
+    @objc private func setModeStopwatch() { selectMode(.stopwatch) }
+
+    private func selectMode(_ mode: OverlayMode) {
+        let s = ClockSettings.shared
+        s.overlayMode = mode
+        s.showPrimaryPane = true
+        s.isVisible = true
+    }
+
+    private func primaryPaneLabel(for mode: OverlayMode) -> String {
+        switch mode {
+        case .clock:     return NSLocalizedString("Clock Pane", comment: "")
+        case .timer:     return NSLocalizedString("Timer Pane", comment: "")
+        case .stopwatch: return NSLocalizedString("Stopwatch Pane", comment: "")
+        }
+    }
+
+    @objc private func togglePrimaryPane() {
+        let s = ClockSettings.shared
+        s.showPrimaryPane.toggle()
+        if s.showPrimaryPane { s.isVisible = true }
+    }
+
+    @objc private func toggleClockPane() {
+        let s = ClockSettings.shared
+        guard s.overlayMode != .clock else { return }
+        s.showClockCompanion.toggle()
+        if s.showClockCompanion { s.isVisible = true }
+    }
 
     @objc private func timerStartPause() {
         switch TimeController.shared.timerState {

@@ -77,6 +77,7 @@ struct SettingsView: View {
                             }))
                 QuickToggle(icon: "24.circle", label: "24-hour", isOn: $s.use24Hour)
                 QuickToggle(icon: "timer", label: "Seconds", isOn: $s.showSeconds)
+                    .help("Clock only — timer and stopwatch keep seconds")
             }
             HStack(spacing: 8) {
                 Picker("", selection: Binding(get: { s.isFullScreen ? nil : s.sizePreset },
@@ -156,7 +157,8 @@ struct SettingsView: View {
                     .pickerStyle(.segmented).labelsHidden().frame(width: 130)
                 }
                 SettingsDivider()
-                ToggleRow(icon: "timer", label: "Show Seconds", value: $s.showSeconds)
+                ToggleRow(icon: "timer", label: "Show Seconds", value: $s.showSeconds,
+                          hint: "Clock only — timer and stopwatch keep their seconds")
                 if !s.use24Hour {
                     SettingsDivider()
                     ToggleRow(icon: "a.magnify", label: "Show AM/PM", value: $s.showAmPm)

@@ -55,28 +55,54 @@ struct ClockView: View {
 
     // MARK: - Card
 
-    // The card fills whatever frame the window gives it.
-    // In click-through mode it looks exactly as before.
-    // In interactive (drag/resize) mode it gains a dashed outline + corner
-    // dots so the user can see the window boundary and resize handles.
+    private struct Pane: Identifiable {
+        let mode: OverlayMode
+        let isCompanion: Bool
+        var id: String { isCompanion ? "clock" : "primary" }
+    }
+
+    private var panes: [Pane] {
+        var result: [Pane] = []
+        if s.showPrimaryPane {
+            result.append(Pane(mode: s.overlayMode, isCompanion: false))
+        }
+        if s.isClockCompanionVisible {
+            result.append(Pane(mode: .clock, isCompanion: true))
+        }
+        return result
+    }
+
+    // The card fills whatever frame the window gives it. When both panes are
+    // visible they share one continuous theme surface and move as one window.
     private var clockCard: some View {
         let style = s.selectedTheme.resolved(using: s)
+        let panes = self.panes
         return ZStack {
-            backgroundLayer(style)
-            centeredContent(style)
-            if s.overlayMode != .clock {
-                VStack {
-                    HStack {
-                        Spacer()
-                        resetControl(style)
-                    }
-                    Spacer()
+            backgroundLayer(style, paneCount: max(1, panes.count))
+
+            HStack(spacing: 0) {
+                ForEach(panes) { pane in
+                    paneContent(pane, style)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .padding(14)
-                .allowsHitTesting(false)
             }
+
+            if panes.count > 1 {
+                Rectangle()
+                    .fill(style.textColor.opacity(0.10))
+                    .frame(width: 1)
+                    .padding(.vertical, 10)
+            }
+
+            HStack(spacing: 0) {
+                ForEach(panes) { pane in
+                    paneControls(pane, style)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .allowsHitTesting(false)
+
             borderLayer(style)
-            if !s.isClickThrough { resizeHandles }
         }
         // Tell the sampler where the card actually sits inside the window; in
         // full-screen mode the window is the whole display but the card is small.
@@ -93,7 +119,7 @@ struct ClockView: View {
     // MARK: - Background
 
     @ViewBuilder
-    private func backgroundLayer(_ style: ThemeStyle) -> some View {
+    private func backgroundLayer(_ style: ThemeStyle, paneCount: Int) -> some View {
         if s.selectedTheme == .weather {
             AnimatedThemeBackground(theme: .weather)
         } else if s.selectedTheme.isPopCulture {
@@ -104,7 +130,7 @@ struct ClockView: View {
                     .clipShape(RoundedRectangle(cornerRadius: style.cornerRadius, style: .continuous))
             }
         } else if s.selectedTheme == .standby {
-            StandByBackground(cornerRadius: style.cornerRadius)
+            StandByBackground(cornerRadius: style.cornerRadius, paneCount: paneCount)
         } else if style.useGlass {
             iOSGlassCard(cornerRadius: style.cornerRadius)
         } else if style.bgOpacity > 0 {
@@ -113,45 +139,48 @@ struct ClockView: View {
         }
     }
 
-    // MARK: - Text
+    // MARK: - Pane content
 
-    private func centeredContent(_ style: ThemeStyle) -> some View {
-        VStack(spacing: 2) {
-            Text(displayString)
+    private func paneContent(_ pane: Pane, _ style: ThemeStyle) -> some View {
+        let flashing = pane.mode == .timer && tc.timerState == .finished
+        let glowOn = flashing ? flashOn : true
+
+        return VStack(spacing: 2) {
+            Text(displayString(for: pane.mode))
                 .font(.system(size: s.fontSize,
                               weight: timeWeight,
                               design: timeDesign)
                       .monospacedDigit())
                 .tracking(timeTracking)
-                .foregroundColor(activeTextColor(style))
+                .foregroundColor(activeTextColor(style, mode: pane.mode))
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.4)
                 .lineLimit(1)
                 .shadow(
-                    color:  glowOrShadow(style, opacity: flashOn ? 0.9 : 0.4),
+                    color:  glowOrShadow(style, opacity: glowOn ? 0.9 : 0.4),
                     radius: style.useNeonGlow ? 10 : 3,
                     x: 0, y: style.useNeonGlow ? 0 : 1
                 )
                 .shadow(
-                    color:  glowOrShadow(style, opacity: flashOn ? 0.5 : 0.2),
+                    color:  glowOrShadow(style, opacity: glowOn ? 0.5 : 0.2),
                     radius: style.useNeonGlow ? 22 : 8,
                     x: 0, y: style.useNeonGlow ? 0 : 4
                 )
 
-            if s.showDayOfWeek && s.overlayMode == .clock {
+            if s.showDayOfWeek && pane.mode == .clock {
                 Text(dayOfWeekString)
                     .font(.system(size: max(9, s.fontSize * 0.22),
                                   weight: .medium, design: labelDesign))
-                    .foregroundStyle(activeTextColor(style).opacity(0.6))
+                    .foregroundStyle(activeTextColor(style, mode: pane.mode).opacity(0.6))
                     .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
             }
 
-            if s.selectedTheme == .weather {
+            if s.selectedTheme == .weather && pane.mode == .clock {
                 WeatherTemperatureLabel()
             }
 
-            if s.overlayMode != .clock {
-                Text(modeBadge)
+            if pane.mode != .clock {
+                Text(modeBadge(for: pane.mode))
                     .font(.system(size: max(9, s.fontSize * 0.18),
                                   weight: .medium, design: badgeDesign))
                     .tracking(badgeTracking)
@@ -162,8 +191,42 @@ struct ClockView: View {
         .padding(.vertical, 8)
     }
 
-    // Visual only: ClockWindow owns the hit area so it can distinguish reset
-    // from a click-to-toggle and from dragging.
+    // Visual only: ClockWindow owns the hit areas so it can distinguish
+    // close/reset from a click-to-toggle and from dragging.
+    private func paneControls(_ pane: Pane, _ style: ThemeStyle) -> some View {
+        ZStack {
+            VStack {
+                HStack {
+                    Spacer()
+                    closeControl(style)
+                }
+                Spacer()
+            }
+            .padding(8)
+
+            if pane.mode != .clock {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        resetControl(style)
+                    }
+                }
+                .padding(8)
+            }
+        }
+    }
+
+    private func closeControl(_ style: ThemeStyle) -> some View {
+        Image(systemName: "xmark")
+            .font(.system(size: 8, weight: .bold))
+            .foregroundStyle(style.textColor.opacity(0.68))
+            .frame(width: 16, height: 16)
+            .background(Circle().fill(Color.white.opacity(0.07)))
+            .overlay(Circle().strokeBorder(style.textColor.opacity(0.16), lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+    }
+
     private func resetControl(_ style: ThemeStyle) -> some View {
         Image(systemName: "arrow.counterclockwise")
             .font(.system(size: 8, weight: .semibold))
@@ -184,47 +247,10 @@ struct ClockView: View {
         }
     }
 
-    // MARK: - Resize Handle Overlay
-    // Shown only when click-through is OFF (interactive / drag-resize mode).
-    // Gives the user a clear visual of where the window edges and corners are.
-
-    private var resizeHandles: some View {
-        ZStack {
-            // Dashed outline = window boundary
-            RoundedRectangle(cornerRadius: max(4, s.cornerRadius))
-                .strokeBorder(
-                    Color.white.opacity(0.55),
-                    style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])
-                )
-
-            // Corner dots = drag targets
-            GeometryReader { geo in
-                let w = geo.size.width
-                let h = geo.size.height
-                let r: CGFloat = 5
-                let p: CGFloat = 5
-
-                ForEach(
-                    [CGPoint(x: p+r, y: p+r),
-                     CGPoint(x: w-p-r, y: p+r),
-                     CGPoint(x: p+r,   y: h-p-r),
-                     CGPoint(x: w-p-r, y: h-p-r)],
-                    id: \.x
-                ) { pt in
-                    Circle()
-                        .fill(Color.white.opacity(0.9))
-                        .shadow(color: .black.opacity(0.45), radius: 2)
-                        .frame(width: r*2, height: r*2)
-                        .position(pt)
-                }
-            }
-        }
-    }
-
     // MARK: - Display helpers
 
-    private var displayString: String {
-        switch s.overlayMode {
+    private func displayString(for mode: OverlayMode) -> String {
+        switch mode {
         case .clock:     return clockTimeString
         case .timer:     return tc.timerRemaining.hmsString
         case .stopwatch: return tc.stopwatchElapsed.hmsString
@@ -274,8 +300,8 @@ struct ClockView: View {
         return f.string(from: clockTime)
     }
 
-    private func activeTextColor(_ style: ThemeStyle) -> Color {
-        if s.overlayMode == .timer && tc.timerState == .finished {
+    private func activeTextColor(_ style: ThemeStyle, mode: OverlayMode) -> Color {
+        if mode == .timer && tc.timerState == .finished {
             return flashOn ? .red : style.textColor
         }
         if adaptiveApplies {
@@ -320,8 +346,8 @@ struct ClockView: View {
             : Color.black.opacity(style.shadowOpacity * opacity)
     }
 
-    private var modeBadge: String {
-        switch s.overlayMode {
+    private func modeBadge(for mode: OverlayMode) -> String {
+        switch mode {
         case .clock: return ""
         case .timer:
             switch tc.timerState {

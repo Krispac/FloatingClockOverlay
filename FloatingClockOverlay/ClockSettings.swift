@@ -8,6 +8,8 @@ final class ClockSettings: ObservableObject {
 
     // MARK: - Overlay Visibility & Behavior
     @Published var isVisible:       Bool
+    @Published var showPrimaryPane: Bool
+    @Published var showClockCompanion: Bool
     @Published var isClickThrough:  Bool
     @Published var showInDock:      Bool
     @Published var launchAtLogin:   Bool
@@ -88,6 +90,8 @@ final class ClockSettings: ObservableObject {
         func str(_ key: String) -> String?                     { d.string(forKey: key) }
 
         isVisible         = bool("isVisible",         default: true)
+        showPrimaryPane   = bool("showPrimaryPane",   default: true)
+        showClockCompanion = bool("showClockCompanion", default: true)
         isClickThrough    = bool("isClickThrough",    default: true)
         showInDock        = bool("showInDock",        default: true)
         launchAtLogin     = bool("launchAtLogin",     default: false)
@@ -113,7 +117,9 @@ final class ClockSettings: ObservableObject {
         fontSize          = dbl("fontSize",          default: 42.0)
         letterSpacing     = dbl("letterSpacing",     default: 0.0)
         use24Hour         = bool("use24Hour",        default: true)
-        showSeconds       = bool("showSeconds",      default: true)
+        // The clock reads better without seconds; timer and stopwatch still
+        // always display them.
+        showSeconds       = bool("showSeconds",      default: false)
         showAmPm          = bool("showAmPm",         default: true)
         amPmUppercase     = bool("amPmUppercase",    default: true)
         showDayOfWeek     = bool("showDayOfWeek",    default: false)
@@ -144,6 +150,14 @@ final class ClockSettings: ObservableObject {
     private func setupPersistence() {
         let d = UserDefaults.standard
         $isVisible        .dropFirst().sink { d.set($0, forKey: "isVisible")         }.store(in: &cancellables)
+        // Turning the overlay on should never leave the user with zero panes,
+        // whichever control path did it (menu, Settings, keyboard shortcut).
+        $isVisible        .dropFirst().sink { [weak self] visible in
+            guard let self, visible, self.visiblePaneCount == 0 else { return }
+            self.showPrimaryPane = true
+        }.store(in: &cancellables)
+        $showPrimaryPane  .dropFirst().sink { d.set($0, forKey: "showPrimaryPane")   }.store(in: &cancellables)
+        $showClockCompanion.dropFirst().sink { d.set($0, forKey: "showClockCompanion") }.store(in: &cancellables)
         $isClickThrough   .dropFirst().sink { d.set($0, forKey: "isClickThrough")    }.store(in: &cancellables)
         $showInDock       .dropFirst().sink { d.set($0, forKey: "showInDock")        }.store(in: &cancellables)
         $launchAtLogin    .dropFirst().sink { d.set($0, forKey: "launchAtLogin")     }.store(in: &cancellables)
@@ -234,6 +248,14 @@ final class ClockSettings: ObservableObject {
 
     func applyDockVisibility(_ show: Bool) {
         NSApp.setActivationPolicy(show ? .regular : .accessory)
+    }
+
+    var isClockCompanionVisible: Bool {
+        overlayMode != .clock && showClockCompanion
+    }
+
+    var visiblePaneCount: Int {
+        (showPrimaryPane ? 1 : 0) + (isClockCompanionVisible ? 1 : 0)
     }
 
     // MARK: - Position Presets (used by ClockWindowController)
