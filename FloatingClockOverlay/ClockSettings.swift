@@ -54,6 +54,8 @@ final class ClockSettings: ObservableObject {
     @Published var timerHours:      Int
     @Published var timerMinutes:    Int
     @Published var timerSeconds:    Int
+    @Published var breakMinutes:    Int
+    @Published var timerSoundEnabled: Bool
 
     // MARK: - Window / Size
     @Published var sizePreset:      SizePreset
@@ -126,6 +128,8 @@ final class ClockSettings: ObservableObject {
         timerHours        = int("timerHours",        default: 0)
         timerMinutes      = int("timerMinutes",      default: 5)
         timerSeconds      = int("timerSeconds",      default: 0)
+        breakMinutes      = int("breakMinutes",      default: 5)
+        timerSoundEnabled = bool("timerSoundEnabled", default: true)
         sizePreset        = SizePreset(rawValue: str("sizePreset") ?? "") ?? .medium
         customWidth       = dbl("customWidth",       default: 260.0)
         customHeight      = dbl("customHeight",      default: 70.0)
@@ -190,6 +194,8 @@ final class ClockSettings: ObservableObject {
         $timerHours       .dropFirst().sink { d.set($0, forKey: "timerHours")       }.store(in: &cancellables)
         $timerMinutes     .dropFirst().sink { d.set($0, forKey: "timerMinutes")     }.store(in: &cancellables)
         $timerSeconds     .dropFirst().sink { d.set($0, forKey: "timerSeconds")     }.store(in: &cancellables)
+        $breakMinutes     .dropFirst().sink { d.set($0, forKey: "breakMinutes")     }.store(in: &cancellables)
+        $timerSoundEnabled.dropFirst().sink { d.set($0, forKey: "timerSoundEnabled") }.store(in: &cancellables)
         $sizePreset       .dropFirst().sink { d.set($0.rawValue, forKey: "sizePreset")          }.store(in: &cancellables)
         $customWidth      .dropFirst().sink { d.set($0, forKey: "customWidth")      }.store(in: &cancellables)
         $customHeight     .dropFirst().sink { d.set($0, forKey: "customHeight")     }.store(in: &cancellables)

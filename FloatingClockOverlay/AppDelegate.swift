@@ -265,7 +265,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .idle:     timerStartItem?.title = NSLocalizedString("Timer: Start", comment: "")
         case .running:  timerStartItem?.title = NSLocalizedString("Timer: Pause", comment: "")
         case .paused:   timerStartItem?.title = NSLocalizedString("Timer: Resume", comment: "")
-        case .finished: timerStartItem?.title = NSLocalizedString("Timer: Restart", comment: "")
+        case .finished: timerStartItem?.title = NSLocalizedString("Timer: Start Break", comment: "")
+        case .breakRunning: timerStartItem?.title = NSLocalizedString("Break: Pause", comment: "")
+        case .breakPaused:  timerStartItem?.title = NSLocalizedString("Break: Resume", comment: "")
         }
 
         let inSW = s.overlayMode == .stopwatch
@@ -365,7 +367,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch TimeController.shared.timerState {
         case .idle, .paused:  TimeController.shared.timerStart()
         case .running:        TimeController.shared.timerPause()
-        case .finished:       TimeController.shared.timerReset(); TimeController.shared.timerStart()
+        case .finished:       TimeController.shared.breakStart()
+        case .breakRunning:   TimeController.shared.breakPause()
+        case .breakPaused:    TimeController.shared.breakResume()
         }
     }
     @objc private func timerReset() { TimeController.shared.timerReset() }

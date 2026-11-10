@@ -31,12 +31,31 @@ struct TimerStopwatchControlsView: View {
                 .onChange(of: settings.timerHours)   { _ in tc.updateTimerDuration() }
                 .onChange(of: settings.timerMinutes) { _ in tc.updateTimerDuration() }
                 .onChange(of: settings.timerSeconds) { _ in tc.updateTimerDuration() }
+
+                HStack {
+                    Spacer()
+                    DurationField(label: "Break min", value: $settings.breakMinutes, range: 0...59)
+                    Spacer()
+                }
+                Text("Break after the timer")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             } else {
                 // Live remaining display
+                if tc.isOnBreak {
+                    Text("Break")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Text(tc.timerRemaining.hmsString)
                     .font(.system(size: 34, weight: .light, design: .monospaced))
                     .foregroundStyle(tc.timerState == .finished ? Color.red : Color.primary)
             }
+
+            ToggleRow(icon: "speaker.wave.2",
+                      label: "Completion Gong",
+                      value: $settings.timerSoundEnabled,
+                      hint: "Low gong when the timer or break ends")
 
             // Buttons
             HStack(spacing: 8) {
@@ -47,9 +66,17 @@ struct TimerStopwatchControlsView: View {
             }
 
             if tc.timerState == .finished {
-                Text("Timer finished!")
+                Text("Timer finished — click the overlay or Start Break.")
                     .font(.caption)
                     .foregroundStyle(.red)
+            } else if tc.timerState == .breakRunning {
+                Text("Break in progress.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if tc.timerState == .breakPaused {
+                Text("Break paused.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, 4)
@@ -69,7 +96,13 @@ struct TimerStopwatchControlsView: View {
             Button("Resume", action: tc.timerStart)
                 .buttonStyle(.borderedProminent)
         case .finished:
-            Button("Restart") { tc.timerReset(); tc.timerStart() }
+            Button("Start Break") { tc.breakStart() }
+                .buttonStyle(.borderedProminent)
+        case .breakRunning:
+            Button("Pause Break", action: tc.breakPause)
+                .buttonStyle(.bordered)
+        case .breakPaused:
+            Button("Resume Break", action: tc.breakResume)
                 .buttonStyle(.borderedProminent)
         }
     }

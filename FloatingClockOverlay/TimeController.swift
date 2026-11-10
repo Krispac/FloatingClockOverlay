@@ -3,7 +3,7 @@ import Combine
 import UserNotifications
 import AppKit
 
-enum TimerRunState   { case idle, running, paused, finished }
+enum TimerRunState   { case idle, running, paused, finished, breakRunning, breakPaused }
 enum StopwatchRunState { case idle, running, paused }
 
 // Single source of truth for timer and stopwatch state.
@@ -17,6 +17,8 @@ final class TimeController: ObservableObject {
 
     private var timerEndDate:           Date?
     private var timerPausedRemaining:   TimeInterval = 0
+    private var breakEndDate:           Date?
+    private var breakPausedRemaining:   TimeInterval = 0
 
     // MARK: - Stopwatch
     @Published private(set) var stopwatchState:   StopwatchRunState = .idle
@@ -28,6 +30,7 @@ final class TimeController: ObservableObject {
 
     // MARK: - Tick
     private var tickSink: AnyCancellable?
+    private var soundSettingSink: AnyCancellable?
 
     private init() {
         let d = settingsDuration
@@ -37,6 +40,13 @@ final class TimeController: ObservableObject {
         tickSink = Timer.publish(every: 0.1, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in self?.tick() }
+
+        soundSettingSink = ClockSettings.shared.$timerSoundEnabled
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { enabled in
+                if !enabled { GentleGong.shared.stop() }
+            }
 
         requestNotificationPermission()
     }
@@ -51,7 +61,14 @@ final class TimeController: ObservableObject {
                 timerEndDate         = nil
                 timerState           = .finished
                 sendTimerNotification()
-                GentleChime.shared.play()
+                GentleGong.shared.play()
+            } else {
+                timerRemaining = rem
+            }
+        } else if timerState == .breakRunning, let end = breakEndDate {
+            let rem = end.timeIntervalSinceNow
+            if rem <= 0 {
+                finishBreak()
             } else {
                 timerRemaining = rem
             }
@@ -86,11 +103,13 @@ final class TimeController: ObservableObject {
 
     func timerReset() {
         timerEndDate         = nil
+        breakEndDate         = nil
+        breakPausedRemaining = 0
         let d                = settingsDuration
         timerPausedRemaining = d
         timerRemaining       = d
         timerState           = .idle
-        GentleChime.shared.stop()
+        GentleGong.shared.stop()
     }
 
     // Called when the user edits the H/M/S fields (only takes effect when idle/finished).
@@ -102,13 +121,68 @@ final class TimeController: ObservableObject {
         timerRemaining       = d
         if wasFinished {
             timerState = .idle
-            GentleChime.shared.stop()
+            GentleGong.shared.stop()
         }
     }
 
     private var settingsDuration: TimeInterval {
         let s = ClockSettings.shared
         return TimeInterval(s.timerHours * 3600 + s.timerMinutes * 60 + s.timerSeconds)
+    }
+
+    // MARK: - Break Controls
+
+    var isOnBreak: Bool {
+        timerState == .breakRunning || timerState == .breakPaused
+    }
+
+    var breakDuration: TimeInterval {
+        TimeInterval(ClockSettings.shared.breakMinutes * 60)
+    }
+
+    // Started only by an explicit click on a finished timer. The finished
+    // state is intentionally sticky so the user can finish what they were
+    // doing before the break begins.
+    func breakStart() {
+        guard timerState == .finished else { return }
+        let duration = breakDuration
+        guard duration > 0 else {
+            timerReset()
+            return
+        }
+        GentleGong.shared.stop()
+        breakPausedRemaining = duration
+        timerRemaining       = duration
+        breakEndDate         = Date().addingTimeInterval(duration)
+        timerState           = .breakRunning
+    }
+
+    func breakPause() {
+        guard timerState == .breakRunning, let end = breakEndDate else { return }
+        breakPausedRemaining = max(0, end.timeIntervalSinceNow)
+        breakEndDate         = nil
+        timerRemaining       = breakPausedRemaining
+        timerState           = .breakPaused
+    }
+
+    func breakResume() {
+        guard timerState == .breakPaused else { return }
+        guard breakPausedRemaining > 0 else {
+            timerReset()
+            return
+        }
+        breakEndDate = Date().addingTimeInterval(breakPausedRemaining)
+        timerState   = .breakRunning
+    }
+
+    private func finishBreak() {
+        breakEndDate         = nil
+        breakPausedRemaining = 0
+        let d                = settingsDuration
+        timerPausedRemaining = d
+        timerRemaining       = d
+        timerState           = .idle
+        GentleGong.shared.play()
     }
 
     // MARK: - Stopwatch Controls
@@ -151,7 +225,7 @@ final class TimeController: ObservableObject {
         let content       = UNMutableNotificationContent()
         content.title     = "Timer Finished"
         content.body      = "Your countdown timer has reached zero."
-        // The app plays its own gentle two-note chime. Keeping the system
+        // The app plays its own gentle low gong. Keeping the system
         // notification silent avoids a second, harsher alert.
         content.sound     = nil
         let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
@@ -159,13 +233,14 @@ final class TimeController: ObservableObject {
     }
 }
 
-// MARK: - Gentle completion chime
+// MARK: - Gentle meditation gong
 
-// Two slow, soft tones (E5 then C5) with a long attack and release. The sound
-// is synthesised once in memory so the app carries no audio asset and nothing
-// about the chime depends on the system alert sounds.
-final class GentleChime {
-    static let shared = GentleChime()
+// One low, warm yoga-room gong (A2) built from a soft fundamental, a slowly
+// beating twin and a few quietly decaying partials. It is synthesised once in
+// memory, so the app carries no audio asset and nothing depends on the system
+// alert sounds.
+final class GentleGong {
+    static let shared = GentleGong()
 
     private var sound: NSSound?
     private lazy var audioData = Self.makeWAVData()
@@ -174,8 +249,9 @@ final class GentleChime {
 
     func play() {
         stop()
+        guard ClockSettings.shared.timerSoundEnabled else { return }
         guard let sound = NSSound(data: audioData) else { return }
-        sound.volume = 0.42
+        sound.volume = 0.48
         sound.play()
         self.sound = sound
     }
@@ -187,22 +263,36 @@ final class GentleChime {
 
     // MARK: Synthesis
 
-    private struct Tone {
+    private struct Strike {
         let frequency: Double
         let duration: Double
+
+        // ratio, relative level, decay rate. The near-unison pair gives a slow,
+        // gentle beat; the inharmonic upper partials add the gong shimmer.
+        private static let partials: [(ratio: Double, amplitude: Double, decay: Double)] = [
+            (1.000, 0.95, 0.42),
+            (1.004, 0.28, 0.44),
+            (2.000, 0.28, 0.60),
+            (2.760, 0.12, 0.80),
+            (4.070, 0.06, 1.05),
+            (5.430, 0.03, 1.30),
+        ]
 
         func sample(at time: Double) -> Double {
             guard time >= 0, time < duration else { return 0 }
 
-            let attack  = 0.35
-            let release = 1.40
+            let attack  = 0.12
+            let release = 0.90
             let fadeIn  = smoothstep(time / attack)
             let fadeOut = smoothstep((duration - time) / release)
-            let decay   = exp(-1.1 * max(0, time - attack) / max(0.001, duration - attack))
 
-            let fundamental = sin(2 * .pi * frequency * time)
-            let harmonic    = 0.12 * sin(2 * .pi * frequency * 2 * time)
-            return 0.24 * fadeIn * fadeOut * decay * (fundamental + harmonic)
+            var body = 0.0
+            for partial in Self.partials {
+                let envelope = exp(-partial.decay * time)
+                body += partial.amplitude * envelope
+                    * sin(2 * .pi * frequency * partial.ratio * time)
+            }
+            return 0.16 * fadeIn * fadeOut * body
         }
 
         private func smoothstep(_ value: Double) -> Double {
@@ -213,22 +303,15 @@ final class GentleChime {
 
     private static func makeWAVData() -> Data {
         let sampleRate = 44_100
-        let first  = Tone(frequency: 659.25, duration: 2.2) // E5
-        let second = Tone(frequency: 523.25, duration: 2.4) // C5
-        let gap = 0.8
-        let totalDuration = first.duration + gap + second.duration
+        let strike = Strike(frequency: 110.00, duration: 6.0) // A2
+        let totalDuration = strike.duration
         let frameCount = Int(totalDuration * Double(sampleRate))
 
         var samples = [Int16]()
         samples.reserveCapacity(frameCount)
         for frame in 0..<frameCount {
             let time = Double(frame) / Double(sampleRate)
-            var value = 0.0
-            if time < first.duration {
-                value = first.sample(at: time)
-            } else if time >= first.duration + gap {
-                value = second.sample(at: time - first.duration - gap)
-            }
+            var value = strike.sample(at: time)
             value = min(max(value, -1), 1)
             samples.append(Int16(value * 32_767))
         }

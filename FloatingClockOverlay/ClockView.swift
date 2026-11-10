@@ -355,6 +355,8 @@ struct ClockView: View {
             case .paused:   return "TIMER ⏸"
             case .finished: return "TIMER ✓"
             case .idle:     return "TIMER"
+            case .breakRunning: return "BREAK ▶"
+            case .breakPaused:  return "BREAK ⏸"
             }
         case .stopwatch:
             switch tc.stopwatchState {
