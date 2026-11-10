@@ -301,10 +301,10 @@ struct SettingsView: View {
                 }
                 if s.selectedTheme == .standby {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("StandBy uses its own Apple-style SF Pro typography.")
+                        Text("StandBy uses Apple-style SF Pro typography.")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                        Text("Font family and weight apply to the other themes.")
+                        Text("Font family applies to the other themes; weight is adjustable.")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
@@ -591,7 +591,7 @@ struct ThemeCard: View {
                 preview
                 Text("10:10")
                     .font(theme == .standby
-                          ? .system(size: 12, weight: .thin, design: .default).monospacedDigit()
+                          ? .system(size: 12, weight: .light, design: .default).monospacedDigit()
                           : .system(size: 11, weight: .light, design: .monospaced))
                     .tracking(theme == .standby ? 0.4 : 0)
                     .foregroundColor(previewTextColor)

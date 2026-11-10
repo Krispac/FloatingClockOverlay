@@ -261,11 +261,11 @@ struct ClockView: View {
         return style.textColor
     }
 
-    // StandBy is a designed theme: Apple-style SF Pro Thin with tabular digits.
-    // Other themes keep the user's font family and weight.
+    // StandBy is a designed theme: Apple-style SF Pro with tabular digits.
+    // Other themes keep the user's font family; all themes keep the chosen weight.
     private var isStandByTheme: Bool { s.selectedTheme == .standby }
     private var timeDesign: Font.Design { isStandByTheme ? .default : s.fontFamily.design }
-    private var timeWeight: Font.Weight { isStandByTheme ? .thin : s.fontWeight.weight }
+    private var timeWeight: Font.Weight { s.fontWeight.weight }
     private var timeTracking: Double { isStandByTheme ? max(1.0, s.letterSpacing) : s.letterSpacing }
     private var labelDesign: Font.Design { isStandByTheme ? .default : s.fontFamily.design }
     private var badgeDesign: Font.Design { isStandByTheme ? .default : .monospaced }
