@@ -467,10 +467,12 @@ struct SettingsView: View {
                       value: Binding(get: { s.launchAtLogin },
                                      set: { s.launchAtLogin = $0; s.applyLaunchAtLogin($0) }),
                       hint: "Requires app in /Applications folder")
-            SettingsDivider()
-            ToggleRow(icon: "arrow.down.circle", label: "Automatically Check for Updates",
-                      value: $autoCheckUpdates,
-                      hint: "Shows a small pop-up when a new version is available")
+            if !ForkConfig.disablesUpstreamServices {
+                SettingsDivider()
+                ToggleRow(icon: "arrow.down.circle", label: "Automatically Check for Updates",
+                          value: $autoCheckUpdates,
+                          hint: "Shows a small pop-up when a new version is available")
+            }
         }
     }
 
@@ -517,14 +519,20 @@ struct SettingsView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
 
-                    Button {
-                        UpdateChecker.checkForUpdate()
-                    } label: {
-                        Label("Check for Updates", systemImage: "arrow.triangle.2.circlepath")
+                    if ForkConfig.disablesUpstreamServices {
+                        Text("Fork build — updates are managed manually.")
                             .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    } else {
+                        Button {
+                            UpdateChecker.checkForUpdate()
+                        } label: {
+                            Label("Check for Updates", systemImage: "arrow.triangle.2.circlepath")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
 
                     Spacer()
                 }

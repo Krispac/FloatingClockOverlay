@@ -3,6 +3,12 @@ import CryptoKit
 import Security
 import SwiftUI
 
+// Personal fork configuration. Upstream's release manifest and install tracker
+// must not replace or report this build, otherwise fork changes are lost.
+enum ForkConfig {
+    static let disablesUpstreamServices = true
+}
+
 // Reads update.json from the website rather than GitHub's "latest release", so a
 // release can be published first and offered to users only when the manifest says so
 // (and pulled again by editing the manifest if it turns out bad).

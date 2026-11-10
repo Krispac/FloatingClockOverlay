@@ -39,8 +39,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setupStatusBar()
         setupGlobalKeyboardShortcut()
         setupMirrorObserver()
-        InstallTracker.trackFirstLaunchIfNeeded()
-        UpdateChecker.startAutomaticChecks()
+        if !ForkConfig.disablesUpstreamServices {
+            InstallTracker.trackFirstLaunchIfNeeded()
+            UpdateChecker.startAutomaticChecks()
+        }
         if ClockSettings.shared.adaptiveColor {
             ScreenSampler.requestPermissionIfNeeded()
         }
