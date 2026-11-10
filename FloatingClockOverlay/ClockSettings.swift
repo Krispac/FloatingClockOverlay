@@ -435,4 +435,5 @@ extension Notification.Name {
     static let applySizePreset = Notification.Name("FloatingClock.applySizePreset")
     static let quitApp         = Notification.Name("FloatingClock.quitApp")
     static let openSettings    = Notification.Name("FloatingClock.openSettings")
+    static let userDragBegan   = Notification.Name("FloatingClock.userDragBegan")
 }

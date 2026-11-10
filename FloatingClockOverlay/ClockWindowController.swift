@@ -15,6 +15,10 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     private var dvdPosition: CGPoint = .zero
     private var isDVDBouncing = false
     private var isRestoringPosition = true
+    private var pendingSavedScreenRestore = false
+    private var positionRestoreTimer: Timer?
+    private var suppressPositionSaveUntil: Date?
+    private var userMoveWorkItem: DispatchWorkItem?
     private var dvdLastTimestamp: TimeInterval = 0
     private var lastVisiblePanes: [OverlayPaneKind] = []
     private var isUpdatingPaneLayout = false
@@ -81,30 +85,32 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
 
     private func restorePosition() {
         guard let window = window else { return }
-        if restoreToSavedScreen(window) { return }
-        restoreFallback(window)
+        if restoreToSavedScreen(window, allowClamp: true) { return }
 
-        // The saved monitor may connect a few seconds after login; keep trying for
-        // 10s unless the user has moved the clock in the meantime.
-        guard !s.windowScreenName.isEmpty else { return }
-        let placed = window.frame.origin
-        var attempts = 0
-        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
-            attempts += 1
-            guard let self = self, let window = self.window, window.frame.origin == placed, attempts <= 10 else {
-                timer.invalidate(); return
-            }
-            if self.restoreToSavedScreen(window) { timer.invalidate() }
+        if !s.windowScreenName.isEmpty {
+            // The saved external display is not connected yet. Show a
+            // temporary fallback, but keep the saved monitor/offset intact.
+            restoreFallback(window)
+            beginSavedScreenRestore()
+        } else {
+            restoreFallback(window)
         }
     }
 
-    private func restoreToSavedScreen(_ window: NSWindow) -> Bool {
+    private func restoreToSavedScreen(_ window: NSWindow, allowClamp: Bool = false) -> Bool {
         guard !s.windowScreenName.isEmpty,
               let targetScreen = NSScreen.screens.first(where: { $0.localizedName == s.windowScreenName })
         else { return false }
-        let origin = NSPoint(x: targetScreen.frame.origin.x + s.windowScreenOffsetX,
+        var origin = NSPoint(x: targetScreen.frame.origin.x + s.windowScreenOffsetX,
                              y: targetScreen.frame.origin.y + s.windowScreenOffsetY)
-        guard targetScreen.visibleFrame.intersects(NSRect(origin: origin, size: window.frame.size)) else { return false }
+        let targetFrame = NSRect(origin: origin, size: window.frame.size)
+        if !targetScreen.visibleFrame.intersects(targetFrame) {
+            guard allowClamp else { return false }
+            let vf = targetScreen.visibleFrame
+            origin.x = min(max(origin.x, vf.minX), max(vf.minX, vf.maxX - targetFrame.width))
+            origin.y = min(max(origin.y, vf.minY), max(vf.minY, vf.maxY - targetFrame.height))
+        }
+        suppressPositionSaves()
         isRestoringPosition = true
         window.setFrameOrigin(origin)
         isRestoringPosition = false
@@ -122,9 +128,65 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
             }
         }
         // Temporary spot only: saving it would overwrite the monitor we retry for.
+        suppressPositionSaves()
         isRestoringPosition = true
         moveToPreset(.topRight, save: false)
         isRestoringPosition = false
+    }
+
+    private func beginSavedScreenRestore() {
+        guard !s.windowScreenName.isEmpty else { return }
+        pendingSavedScreenRestore = true
+        positionRestoreTimer?.invalidate()
+        let started = Date()
+        positionRestoreTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] timer in
+            guard let self else { timer.invalidate(); return }
+            if self.restoreSavedWindowPositionIfPossible() {
+                self.finishSavedScreenRestore()
+            } else if Date().timeIntervalSince(started) >= 60 {
+                // Keep the saved position pending. A later display-change
+                // notification, or a manual move, will resolve it.
+                timer.invalidate()
+            }
+        }
+        if restoreSavedWindowPositionIfPossible() {
+            finishSavedScreenRestore()
+        }
+    }
+
+    private func finishSavedScreenRestore() {
+        pendingSavedScreenRestore = false
+        positionRestoreTimer?.invalidate()
+        positionRestoreTimer = nil
+    }
+
+    private func cancelPendingSavedScreenRestore() {
+        pendingSavedScreenRestore = false
+        positionRestoreTimer?.invalidate()
+        positionRestoreTimer = nil
+    }
+
+    private func suppressPositionSaves(for duration: TimeInterval = 0.6) {
+        suppressPositionSaveUntil = Date().addingTimeInterval(duration)
+    }
+
+    private var isPositionSaveSuppressed: Bool {
+        if let until = suppressPositionSaveUntil, Date() < until { return true }
+        return false
+    }
+
+    // A real drag starts with windowWillMove; keeping that signal (plus the
+    // pressed-button check) means a manual move is never mistaken for a
+    // system reflow after wake.
+    private func noteUserMove() {
+        userMoveWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in self?.userMoveWorkItem = nil }
+        userMoveWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: item)
+    }
+
+    private var isUserMovingWindow: Bool {
+        userMoveWorkItem != nil || NSEvent.pressedMouseButtons != 0
     }
 
     // MARK: - Always On Top (across every app switch)
@@ -178,7 +240,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func handleWillSleep(_ notification: Notification) {
-        savePosition()
+        if !pendingSavedScreenRestore { savePosition() }
     }
 
     @objc private func handleDidWake(_ notification: Notification) {
@@ -195,6 +257,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     // cannot move the work-time start earlier.
     @objc private func handleScreensDidWake(_ notification: Notification) {
         ClockSettings.shared.refreshWorkSessionStartIfNeeded()
+        restoreAfterDisplayChange()
     }
 
     @objc private func handleScreenParametersChanged(_ notification: Notification) {
@@ -205,33 +268,55 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     // monitor layout changes. Reapply the last user position after the display
     // stack has settled, using the saved screen-relative coordinates.
     private func restoreAfterDisplayChange() {
-        for delay in [0.8, 2.5] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                self?.restoreSavedWindowPosition()
-            }
+        guard restoresSavedPosition else { return }
+        if !s.windowScreenName.isEmpty {
+            beginSavedScreenRestore()
+        } else {
+            _ = restoreSavedWindowPositionIfPossible()
         }
     }
 
-    private func restoreSavedWindowPosition() {
-        guard let window = window, !s.isFullScreen else { return }
-        if restoreToSavedScreen(window) { return }
+    @discardableResult
+    private func restoreSavedWindowPositionIfPossible() -> Bool {
+        guard let window = window, !s.isFullScreen else { return true }
+        if restoreToSavedScreen(window, allowClamp: true) { return true }
+
+        // Wait for a saved external display instead of overwriting its
+        // position with the screen that macOS temporarily reflowed us onto.
+        guard s.windowScreenName.isEmpty else { return false }
 
         let savedFrame = NSRect(
             origin: NSPoint(x: s.windowX, y: s.windowY),
             size: window.frame.size
         )
-        if NSScreen.screens.contains(where: { $0.visibleFrame.intersects(savedFrame) }) {
+        if hasSavedPosition,
+           NSScreen.screens.contains(where: { $0.visibleFrame.intersects(savedFrame) }) {
+            suppressPositionSaves()
             isRestoringPosition = true
             window.setFrameOrigin(savedFrame.origin)
             isRestoringPosition = false
-        } else {
-            clampToScreen(window)
+            return true
         }
+
+        suppressPositionSaves()
+        isRestoringPosition = true
+        clampToScreen(window)
+        isRestoringPosition = false
+        return true
     }
 
     // MARK: - Observers
 
     private func setupObservers() {
+        NotificationCenter.default
+            .publisher(for: .userDragBegan)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self = self, !self.isDVDBouncing else { return }
+                self.noteUserMove()
+            }
+            .store(in: &cancellables)
+
         s.$isClickThrough
             .receive(on: DispatchQueue.main)
             .sink { [weak self] ct in
@@ -430,6 +515,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         var frame = window.frame
         frame.origin.x = min(max(frame.origin.x, vf.minX), vf.maxX - frame.width)
         frame.origin.y = min(max(frame.origin.y, vf.minY), vf.maxY - frame.height)
+        suppressPositionSaves()
         window.setFrameOrigin(frame.origin)
     }
 
@@ -459,8 +545,14 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         case .reset:       origin = NSPoint(x: f.maxX - w - p, y: f.maxY - h - p)
         }
 
+        if save {
+            cancelPendingSavedScreenRestore()
+            suppressPositionSaves(for: 0.4)
+        } else {
+            suppressPositionSaves()
+        }
         window.setFrameOrigin(origin)
-        if save { savePosition() }
+        if save { savePosition(force: true) }
     }
 
     // MARK: - Burn-in Prevention
@@ -681,9 +773,13 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
 
     // MARK: - Persistence
 
-    func savePosition() {
+    func savePosition(force: Bool = false) {
         // While bouncing, keep the pre-bounce spot as the saved position.
         guard let window = window, !isDVDBouncing else { return }
+        // A display change can temporarily reflow the window onto another
+        // screen. Do not persist that transient frame unless the user is
+        // actively dragging or explicitly saving a new position.
+        if !force && pendingSavedScreenRestore && NSEvent.pressedMouseButtons == 0 { return }
         let origin = window.frame.origin
         s.windowX = origin.x
         s.windowY = origin.y
@@ -712,10 +808,17 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowDidMove(_ notification: Notification) {
-        if !isDVDBouncing && !isRestoringPosition {
-            savePosition()
+        guard !isDVDBouncing else { return }
+        if isUserMovingWindow {
+            noteUserMove()
+            cancelPendingSavedScreenRestore()
+            savePosition(force: true)
+            return
         }
+        guard !isRestoringPosition, !isPositionSaveSuppressed, !pendingSavedScreenRestore else { return }
+        savePosition()
     }
+
 }
 
 // MARK: - Custom Window (easier dragging)
@@ -766,11 +869,13 @@ class ClockWindow: NSWindow {
         let nearEdge = loc.x < edge || loc.x > frame.width - edge ||
                        loc.y < edge || loc.y > frame.height - edge
         if nearEdge {
+            NotificationCenter.default.post(name: .userDragBegan, object: nil)
             super.mouseDown(with: event)
             return
         }
 
         let startOrigin = frame.origin
+        NotificationCenter.default.post(name: .userDragBegan, object: nil)
         performDrag(with: event)
         scheduleSingleClick(from: startOrigin, togglesTimer: pane?.kind == .primary)
     }
