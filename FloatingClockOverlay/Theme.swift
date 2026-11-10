@@ -6,6 +6,7 @@ import AppKit
 enum ClockTheme: String, CaseIterable, Identifiable {
     case transparent    = "transparent"
     case glass          = "glass"
+    case standby        = "standby"
     case dark           = "dark"
     case light          = "light"
     case neon           = "neon"
@@ -28,6 +29,7 @@ enum ClockTheme: String, CaseIterable, Identifiable {
         case .weather:       return "Weather"
         case .transparent:   return "Transparent"
         case .glass:         return "Glass"
+        case .standby:       return "StandBy"
         case .dark:          return "Dark"
         case .light:         return "Light"
         case .neon:          return "Neon"
@@ -47,6 +49,7 @@ enum ClockTheme: String, CaseIterable, Identifiable {
         case .weather:       return "cloud.sun.fill"
         case .transparent:   return "circle.dashed"
         case .glass:         return "circle.hexagongrid"
+        case .standby:       return "moon.stars.fill"
         case .dark:          return "moon.fill"
         case .light:         return "sun.max.fill"
         case .neon:          return "bolt.fill"
@@ -188,6 +191,14 @@ extension ClockTheme {
                               shadowOpacity: 0.25,
                               useNeonGlow: false, glowColor: .clear)
 
+        case .standby:
+            return ThemeStyle(useVibrancy: false, useGlass: false,
+                              bgColor: Color(hex: "0A0A0C"), bgOpacity: 0.92,
+                              textColor: Color(hex: "FFF4E2"), cornerRadius: cr,
+                              borderColor: Color(hex: "FFD7A1"), borderOpacity: 0.16,
+                              shadowOpacity: 0,
+                              useNeonGlow: true, glowColor: Color(hex: "FFB15E"))
+
         case .dark:
             return ThemeStyle(useVibrancy: false, useGlass: false,
                               bgColor: Color(white: 0.08), bgOpacity: 0.92,
@@ -293,6 +304,59 @@ extension ClockTheme {
                               borderColor: Color(hex: "DC2626"), borderOpacity: 0.7,
                               shadowOpacity: 0,
                               useNeonGlow: true, glowColor: Color(hex: "FBBF24"))
+        }
+    }
+}
+
+// MARK: - StandBy Night Background
+//
+// A near-black pane with a warm ambient glow behind the digits, a soft top
+// specular edge and no heavy border. Inspired by iPhone StandBy at night.
+
+struct StandByBackground: View {
+    var cornerRadius: Double
+
+    var body: some View {
+        let cr = max(8, cornerRadius)
+
+        ZStack {
+            RoundedRectangle(cornerRadius: cr, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color(hex: "17130F"), location: 0.0),
+                            .init(color: Color(hex: "070708"), location: 1.0),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .opacity(0.94)
+
+            RadialGradient(
+                colors: [
+                    Color(hex: "FFB15E").opacity(0.22),
+                    Color(hex: "FFB15E").opacity(0.05),
+                    .clear,
+                ],
+                center: UnitPoint(x: 0.5, y: 0.0),
+                startRadius: 0,
+                endRadius: 130
+            )
+            .clipShape(RoundedRectangle(cornerRadius: cr, style: .continuous))
+
+            RoundedRectangle(cornerRadius: cr, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.white.opacity(0.22), location: 0.0),
+                            .init(color: Color.white.opacity(0.04), location: 1.0),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 0.8
+                )
         }
     }
 }

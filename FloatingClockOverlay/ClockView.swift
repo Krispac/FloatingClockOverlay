@@ -92,6 +92,8 @@ struct ClockView: View {
                 AnimatedThemeBackground(theme: s.selectedTheme)
                     .clipShape(RoundedRectangle(cornerRadius: style.cornerRadius, style: .continuous))
             }
+        } else if s.selectedTheme == .standby {
+            StandByBackground(cornerRadius: style.cornerRadius)
         } else if style.useGlass {
             iOSGlassCard(cornerRadius: style.cornerRadius)
         } else if style.bgOpacity > 0 {

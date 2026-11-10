@@ -179,6 +179,12 @@ struct DurationField: View {
                 .frame(width: 58)
                 .focused($focused)
                 .onAppear { text = String(format: "%02d", value) }
+                .onChange(of: text) { newText in
+                    // Keep the bound value current while typing so pressing Start
+                    // immediately after editing can never use the previous duration.
+                    guard let parsed = Int(newText) else { return }
+                    value = min(range.upperBound, max(range.lowerBound, parsed))
+                }
                 .onChange(of: value) { newVal in
                     if !focused { text = String(format: "%02d", newVal) }
                 }

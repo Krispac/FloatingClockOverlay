@@ -603,6 +603,13 @@ struct ThemeCard: View {
                 checkerboard
                 iOSGlassCard(cornerRadius: 8)
             }
+        case .standby:
+            ZStack {
+                LinearGradient(colors: [Color(hex: "17130F"), Color(hex: "070708")],
+                               startPoint: .top, endPoint: .bottom)
+                RadialGradient(colors: [Color(hex: "FFB15E").opacity(0.24), .clear],
+                               center: .top, startRadius: 0, endRadius: 46)
+            }
         case .dark:
             Color(white: 0.08).opacity(0.92)
         case .light:
@@ -636,6 +643,7 @@ struct ThemeCard: View {
         case .weather:        return .white
         case .light:          return Color(white: 0.1)
         case .neon:           return .cyan
+        case .standby:        return Color(hex: "FFF4E2")
         case .toyStory:       return Color(hex: "FFD659")
         case .f1:             return Color(hex: "FFCC00")
         case .naruto:         return Color(hex: "F7F7F7")
@@ -650,6 +658,7 @@ struct ThemeCard: View {
     private var neonColor: Color? {
         switch theme {
         case .neon:           return .cyan
+        case .standby:        return Color(hex: "FFB15E")
         case .toyStory:       return Color(hex: "5CF115")
         case .f1:             return Color(hex: "FF3333")
         case .naruto:         return Color(hex: "53A6FD")

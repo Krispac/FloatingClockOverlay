@@ -64,6 +64,12 @@ final class TimeController: ObservableObject {
 
     func timerStart() {
         guard timerState == .idle || timerState == .paused else { return }
+        if timerState == .idle {
+            // Read the fields at the moment of starting, not a value cached
+            // before the last edit was committed by the text field.
+            timerPausedRemaining = settingsDuration
+            timerRemaining       = timerPausedRemaining
+        }
         guard timerPausedRemaining > 0 else { return }
         timerEndDate = Date().addingTimeInterval(timerPausedRemaining)
         timerState   = .running
