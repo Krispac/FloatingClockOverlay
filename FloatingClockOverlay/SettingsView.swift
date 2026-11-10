@@ -301,10 +301,10 @@ struct SettingsView: View {
                 }
                 if s.selectedTheme == .standby {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("StandBy uses Apple-style SF Pro typography.")
+                        Text("StandBy uses Apple-style SF Pro Regular typography.")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                        Text("Font family applies to the other themes; weight is adjustable.")
+                        Text("Font family and weight apply to the other themes.")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
@@ -591,7 +591,7 @@ struct ThemeCard: View {
                 preview
                 Text("10:10")
                     .font(theme == .standby
-                          ? .system(size: 12, weight: .light, design: .default).monospacedDigit()
+                          ? .system(size: 12, weight: .regular, design: .default).monospacedDigit()
                           : .system(size: 11, weight: .light, design: .monospaced))
                     .tracking(theme == .standby ? 0.4 : 0)
                     .foregroundColor(previewTextColor)
@@ -629,10 +629,10 @@ struct ThemeCard: View {
             }
         case .standby:
             ZStack {
-                LinearGradient(colors: [Color(hex: "0C0B0A"), Color(hex: "020203")],
+                LinearGradient(colors: [Color(hex: "09090B"), Color(hex: "030304")],
                                startPoint: .top, endPoint: .bottom)
                 RadialGradient(colors: [Color(hex: "FFB15E").opacity(0.28), .clear],
-                               center: .top, startRadius: 0, endRadius: 46)
+                               center: .center, startRadius: 0, endRadius: 46)
             }
         case .dark:
             Color(white: 0.08).opacity(0.92)

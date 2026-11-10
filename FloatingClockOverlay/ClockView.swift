@@ -64,6 +64,17 @@ struct ClockView: View {
         return ZStack {
             backgroundLayer(style)
             centeredContent(style)
+            if s.overlayMode != .clock {
+                VStack {
+                    HStack {
+                        Spacer()
+                        resetControl(style)
+                    }
+                    Spacer()
+                }
+                .padding(14)
+                .allowsHitTesting(false)
+            }
             borderLayer(style)
             if !s.isClickThrough { resizeHandles }
         }
@@ -149,6 +160,18 @@ struct ClockView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
+    }
+
+    // Visual only: ClockWindow owns the hit area so it can distinguish reset
+    // from a click-to-toggle and from dragging.
+    private func resetControl(_ style: ThemeStyle) -> some View {
+        Image(systemName: "arrow.counterclockwise")
+            .font(.system(size: 8, weight: .semibold))
+            .foregroundStyle(style.textColor.opacity(0.68))
+            .frame(width: 16, height: 16)
+            .background(Circle().fill(Color.white.opacity(0.07)))
+            .overlay(Circle().strokeBorder(style.textColor.opacity(0.16), lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
     }
 
     // MARK: - Border
@@ -261,11 +284,11 @@ struct ClockView: View {
         return style.textColor
     }
 
-    // StandBy is a designed theme: Apple-style SF Pro with tabular digits.
-    // Other themes keep the user's font family; all themes keep the chosen weight.
+    // StandBy is a designed theme: Apple-style SF Pro Regular with tabular digits.
+    // Other themes keep the user's font family and weight.
     private var isStandByTheme: Bool { s.selectedTheme == .standby }
     private var timeDesign: Font.Design { isStandByTheme ? .default : s.fontFamily.design }
-    private var timeWeight: Font.Weight { s.fontWeight.weight }
+    private var timeWeight: Font.Weight { isStandByTheme ? .regular : s.fontWeight.weight }
     private var timeTracking: Double { isStandByTheme ? max(1.0, s.letterSpacing) : s.letterSpacing }
     private var labelDesign: Font.Design { isStandByTheme ? .default : s.fontFamily.design }
     private var badgeDesign: Font.Design { isStandByTheme ? .default : .monospaced }

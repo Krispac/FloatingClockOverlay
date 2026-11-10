@@ -324,8 +324,8 @@ struct StandByBackground: View {
                 .fill(
                     LinearGradient(
                         stops: [
-                            .init(color: Color(hex: "0C0B0A"), location: 0.0),
-                            .init(color: Color(hex: "020203"), location: 1.0),
+                            .init(color: Color(hex: "09090B"), location: 0.0),
+                            .init(color: Color(hex: "030304"), location: 1.0),
                         ],
                         startPoint: .top,
                         endPoint: .bottom
@@ -335,13 +335,13 @@ struct StandByBackground: View {
 
             RadialGradient(
                 colors: [
-                    Color(hex: "FFB15E").opacity(0.26),
-                    Color(hex: "FFB15E").opacity(0.04),
+                    Color(hex: "FFB15E").opacity(0.20),
+                    Color(hex: "FFB15E").opacity(0.05),
                     .clear,
                 ],
-                center: UnitPoint(x: 0.5, y: 0.0),
+                center: .center,
                 startRadius: 0,
-                endRadius: 140
+                endRadius: 150
             )
             .clipShape(RoundedRectangle(cornerRadius: cr, style: .continuous))
 
@@ -349,7 +349,7 @@ struct StandByBackground: View {
                 .strokeBorder(
                     LinearGradient(
                         stops: [
-                            .init(color: Color.white.opacity(0.16), location: 0.0),
+                            .init(color: Color.white.opacity(0.12), location: 0.0),
                             .init(color: Color.white.opacity(0.04), location: 1.0),
                         ],
                         startPoint: .top,

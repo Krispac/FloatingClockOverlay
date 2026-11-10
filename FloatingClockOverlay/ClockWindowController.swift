@@ -535,19 +535,98 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
 // MARK: - Custom Window (easier dragging)
 
 class ClockWindow: NSWindow {
+    private var pendingSingleClick: DispatchWorkItem?
+    private let resetButtonSize: CGFloat = 16
+    private let resetButtonInset: CGFloat = 14
+
     override func mouseDown(with event: NSEvent) {
+        let loc = event.locationInWindow
+
+        if isResetButtonVisible && resetButtonRect.contains(loc) {
+            if event.clickCount == 1 {
+                pendingSingleClick?.cancel()
+                pendingSingleClick = nil
+                resetCurrentMode()
+            }
+            return
+        }
+
         if event.clickCount == 2 {
+            pendingSingleClick?.cancel()
+            pendingSingleClick = nil
             NotificationCenter.default.post(name: .openSettings, object: nil)
             return
         }
-        let loc = event.locationInWindow
+
+        guard event.clickCount == 1 else { return }
+
         let edge: CGFloat = 4
         let nearEdge = loc.x < edge || loc.x > frame.width - edge ||
                        loc.y < edge || loc.y > frame.height - edge
         if nearEdge {
             super.mouseDown(with: event)
-        } else {
-            performDrag(with: event)
+            return
+        }
+
+        let startOrigin = frame.origin
+        performDrag(with: event)
+        scheduleSingleClick(from: startOrigin)
+    }
+
+    private var isResetButtonVisible: Bool {
+        ClockSettings.shared.overlayMode != .clock
+    }
+
+    private var resetButtonRect: NSRect {
+        NSRect(x: frame.width - resetButtonInset - resetButtonSize,
+               y: frame.height - resetButtonInset - resetButtonSize,
+               width: resetButtonSize,
+               height: resetButtonSize)
+    }
+
+    private func scheduleSingleClick(from startOrigin: NSPoint) {
+        pendingSingleClick?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingSingleClick = nil
+            let dx = self.frame.origin.x - startOrigin.x
+            let dy = self.frame.origin.y - startOrigin.y
+            guard dx * dx + dy * dy < 4 else { return }
+            guard ClockSettings.shared.overlayMode != .clock else { return }
+            self.toggleTimerOrStopwatch()
+        }
+        pendingSingleClick = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval,
+                                      execute: work)
+    }
+
+    private func toggleTimerOrStopwatch() {
+        let tc = TimeController.shared
+        switch ClockSettings.shared.overlayMode {
+        case .timer:
+            switch tc.timerState {
+            case .idle:     tc.timerStart()
+            case .running:  tc.timerPause()
+            case .paused:   tc.timerStart()
+            case .finished: tc.timerReset(); tc.timerStart()
+            }
+        case .stopwatch:
+            switch tc.stopwatchState {
+            case .idle:    tc.stopwatchStart()
+            case .running: tc.stopwatchPause()
+            case .paused:  tc.stopwatchStart()
+            }
+        case .clock:
+            break
+        }
+    }
+
+    private func resetCurrentMode() {
+        let tc = TimeController.shared
+        switch ClockSettings.shared.overlayMode {
+        case .timer:     tc.timerReset()
+        case .stopwatch: tc.stopwatchReset()
+        case .clock:     break
         }
     }
 }
