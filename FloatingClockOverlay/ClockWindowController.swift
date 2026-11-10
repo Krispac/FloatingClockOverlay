@@ -813,7 +813,7 @@ class ClockWindow: NSWindow {
 
     private func hasResetControl(_ pane: PaneHitArea) -> Bool {
         switch pane.kind {
-        case .workTime: return ClockSettings.shared.workStartManual
+        case .workTime: return true
         case .primary:  return ClockSettings.shared.overlayMode != .clock
         case .clock:    return false
         }
@@ -875,7 +875,11 @@ class ClockWindow: NSWindow {
         let tc = TimeController.shared
         switch pane.kind {
         case .workTime:
-            ClockSettings.shared.resetWorkTimeStart()
+            if ClockSettings.shared.workStartManual {
+                ClockSettings.shared.resetWorkTimeStart()
+            } else {
+                ClockSettings.shared.startWorkTimeNow()
+            }
         case .primary:
             switch ClockSettings.shared.overlayMode {
             case .timer:     tc.timerReset()

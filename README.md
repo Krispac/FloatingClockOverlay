@@ -28,7 +28,7 @@ A polished, transparent always-on-top clock overlay for macOS — built with Swi
 - Click-to-start break after the timer, with pause/resume and a 5-minute default
 - Silent macOS notification when the countdown timer finishes
 - **Three joined panes:** work time, primary timer/stopwatch, and side clock
-- **Work-time pane:** `6:45 h` since the persisted first app launch or full screen wake of the day, with a manual override, rounded up to 15 minutes
+- **Work-time pane:** `6:45 h` since the persisted first app launch or full screen wake of the day, with a one-click **Start now** override for the current day, rounded up to 15 minutes
 - **Snap to Top Center:** one click moves the joined panes to the top edge, horizontally centered on the current display
 - **Adaptive Color** — auto-adjusts text color based on background brightness
 - **Burn-in Prevention** — slowly drifts the clock to protect your display

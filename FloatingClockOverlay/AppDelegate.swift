@@ -233,6 +233,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         m.addItem(workTime)
         m.addItem(primary)
         m.addItem(clock)
+        m.addItem(.separator())
+        let startNow = NSMenuItem(title: NSLocalizedString("Work Time: Start Now", comment: ""),
+                                  action: #selector(workTimeStartNow), keyEquivalent: "")
+        startNow.target = self
+        m.addItem(startNow)
         return m
     }
 
@@ -327,6 +332,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func snapToTopCenter() {
         NotificationCenter.default.post(name: .moveToPreset, object: ClockSettings.PositionPreset.topCenter)
+    }
+    @objc private func workTimeStartNow() {
+        ClockSettings.shared.startWorkTimeNow()
     }
     @objc private func toggleLaunchAtLogin() {
         let s = ClockSettings.shared

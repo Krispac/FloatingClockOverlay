@@ -157,7 +157,7 @@ struct SettingsView: View {
                 ToggleRow(icon: "hand.point.up.left",
                           label: "Manual Start Time",
                           value: $s.workStartManual,
-                          hint: "When off, the pane uses the first app launch or full screen wake of the day")
+                          hint: "When off, the pane uses the first app launch/full wake, or today's Start now override")
                 SettingsDivider()
                 if s.workStartManual {
                     SettingsRow(icon: "clock", label: "Start Time") {
@@ -168,7 +168,7 @@ struct SettingsView: View {
                             .frame(width: 110)
                     }
                 } else {
-                    SettingsRow(icon: "power", label: "Detected Start") {
+                    SettingsRow(icon: "power", label: "Current Start") {
                         Text(s.detectedWorkStartClockString())
                             .font(.callout.monospacedDigit())
                             .foregroundStyle(.secondary)

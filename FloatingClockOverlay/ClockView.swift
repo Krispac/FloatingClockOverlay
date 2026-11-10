@@ -259,13 +259,17 @@ struct ClockView: View {
             }
             .padding(8)
 
-            if pane.kind == .workTime && s.workStartManual ||
-               pane.kind == .primary && s.overlayMode != .clock {
+            if pane.kind == .workTime ||
+               (pane.kind == .primary && s.overlayMode != .clock) {
                 VStack {
                     Spacer()
                     HStack {
                         Spacer()
-                        resetControl(style)
+                        if pane.kind == .workTime && !s.workStartManual {
+                            startNowControl(style)
+                        } else {
+                            resetControl(style)
+                        }
                     }
                 }
                 .padding(8)
@@ -290,6 +294,16 @@ struct ClockView: View {
             .frame(width: 16, height: 16)
             .background(Circle().fill(Color.white.opacity(0.07)))
             .overlay(Circle().strokeBorder(style.textColor.opacity(0.16), lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+    }
+
+    private func startNowControl(_ style: ThemeStyle) -> some View {
+        Image(systemName: "play.fill")
+            .font(.system(size: 7, weight: .bold))
+            .foregroundStyle(style.textColor.opacity(0.78))
+            .frame(width: 16, height: 16)
+            .background(Circle().fill(Color.white.opacity(0.09)))
+            .overlay(Circle().strokeBorder(style.textColor.opacity(0.20), lineWidth: 0.5))
             .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
     }
 

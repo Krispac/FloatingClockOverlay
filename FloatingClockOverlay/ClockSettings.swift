@@ -68,6 +68,7 @@ final class ClockSettings: ObservableObject {
     @Published var workStartHour:   Int
     @Published var workStartMinute: Int
     @Published var workSessionStart: Date
+    @Published var workStartOverride: Date?
 
     // MARK: - Window / Size
     @Published var sizePreset:      SizePreset
@@ -152,6 +153,17 @@ final class ClockSettings: ObservableObject {
             : now
         let resolvedStart = Self.normalizedWorkSessionStart(candidateStart, now: now)
         workSessionStart  = resolvedStart
+        let storedOverride = dbl("workStartOverride", default: 0)
+        let candidateOverride = storedOverride > 0
+            ? Date(timeIntervalSince1970: storedOverride)
+            : nil
+        if let candidateOverride,
+           Calendar.current.isDate(candidateOverride, inSameDayAs: now),
+           candidateOverride <= now {
+            workStartOverride = candidateOverride
+        } else {
+            workStartOverride = nil
+        }
         let activeTime = Calendar.current.dateComponents([.hour, .minute], from: resolvedStart)
         workStartHour     = int("workStartHour",      default: activeTime.hour ?? 8)
         workStartMinute   = int("workStartMinute",    default: activeTime.minute ?? 0)
@@ -175,6 +187,11 @@ final class ClockSettings: ObservableObject {
 
         setupPersistence()
         d.set(workSessionStart.timeIntervalSince1970, forKey: "workSessionStart")
+        if let override = workStartOverride {
+            d.set(override.timeIntervalSince1970, forKey: "workStartOverride")
+        } else {
+            d.removeObject(forKey: "workStartOverride")
+        }
     }
 
     private func setupPersistence() {
@@ -227,6 +244,13 @@ final class ClockSettings: ObservableObject {
         $workStartHour    .dropFirst().sink { d.set($0, forKey: "workStartHour")     }.store(in: &cancellables)
         $workStartMinute  .dropFirst().sink { d.set($0, forKey: "workStartMinute")   }.store(in: &cancellables)
         $workSessionStart .dropFirst().sink { d.set($0.timeIntervalSince1970, forKey: "workSessionStart") }.store(in: &cancellables)
+        $workStartOverride.dropFirst().sink { date in
+            if let date {
+                d.set(date.timeIntervalSince1970, forKey: "workStartOverride")
+            } else {
+                d.removeObject(forKey: "workStartOverride")
+            }
+        }.store(in: &cancellables)
         $sizePreset       .dropFirst().sink { d.set($0.rawValue, forKey: "sizePreset")          }.store(in: &cancellables)
         $customWidth      .dropFirst().sink { d.set($0, forKey: "customWidth")      }.store(in: &cancellables)
         $customHeight     .dropFirst().sink { d.set($0, forKey: "customHeight")     }.store(in: &cancellables)
@@ -327,6 +351,9 @@ final class ClockSettings: ObservableObject {
     func refreshWorkSessionStartIfNeeded(now: Date = Date(), requireAwakeDisplay: Bool = false) {
         if requireAwakeDisplay && !Self.hasAwakeDisplay() { return }
         let calendar = Calendar.current
+        if let override = workStartOverride, !calendar.isDate(override, inSameDayAs: now) {
+            workStartOverride = nil
+        }
         if !calendar.isDate(workSessionStart, inSameDayAs: now) || workSessionStart > now {
             workSessionStart = now
         }
@@ -341,20 +368,27 @@ final class ClockSettings: ObservableObject {
     }
 
     func workStartDate(now: Date = Date()) -> Date {
-        guard workStartManual else {
-            // Read-only fallback in case the day-change/wake observer has not
-            // fired yet. The observer persists the new value shortly after.
-            let calendar = Calendar.current
-            guard calendar.isDate(workSessionStart, inSameDayAs: now),
-                  workSessionStart <= now
-            else { return now }
-            return workSessionStart
+        if workStartManual {
+            var components = Calendar.current.dateComponents([.year, .month, .day], from: now)
+            components.hour = min(23, max(0, workStartHour))
+            components.minute = min(59, max(0, workStartMinute))
+            components.second = 0
+            return Calendar.current.date(from: components) ?? now
         }
-        var components = Calendar.current.dateComponents([.year, .month, .day], from: now)
-        components.hour = min(23, max(0, workStartHour))
-        components.minute = min(59, max(0, workStartMinute))
-        components.second = 0
-        return Calendar.current.date(from: components) ?? now
+
+        if let override = workStartOverride,
+           Calendar.current.isDate(override, inSameDayAs: now),
+           override <= now {
+            return override
+        }
+
+        // Read-only fallback in case the day-change/wake observer has not
+        // fired yet. The observer persists the new value shortly after.
+        let calendar = Calendar.current
+        guard calendar.isDate(workSessionStart, inSameDayAs: now),
+              workSessionStart <= now
+        else { return now }
+        return workSessionStart
     }
 
     // The pane intentionally has no seconds. Rounding up to the next quarter
@@ -376,6 +410,12 @@ final class ClockSettings: ObservableObject {
     func resetWorkTimeStart() {
         workStartManual = false
         refreshWorkSessionStartIfNeeded()
+    }
+
+    func startWorkTimeNow(now: Date = Date()) {
+        refreshWorkSessionStartIfNeeded(now: now)
+        workStartManual = false
+        workStartOverride = now
     }
 
     private static let clockFormatter: DateFormatter = {
