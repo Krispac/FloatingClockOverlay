@@ -10,6 +10,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     private var burnInTimer: Timer?
     private var burnInDirection: Int = 1  // alternates drift direction
     private var dvdTimer: Timer?
+    private var timerStateSink: AnyCancellable?
     private var dvdVelocity: CGPoint = CGPoint(x: 0.4, y: 0.3)
     private var dvdPosition: CGPoint = .zero
     private var isDVDBouncing = false
@@ -157,9 +158,13 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
             .sink { [weak self] ct in
                 // .resizable stays in the mask always — mouse events are what
                 // control whether the user can interact (drag/resize).
-                self?.window?.ignoresMouseEvents = ct
+                self?.applyMousePassthrough()
             }
             .store(in: &cancellables)
+
+        timerStateSink = TimeController.shared.$timerState
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.applyMousePassthrough() }
 
         s.$windowOpacity
             .receive(on: DispatchQueue.main)
@@ -401,6 +406,16 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
                 self.startBurnInTimer()
             }
             .store(in: &cancellables)
+    }
+
+    // Click-through normally makes the overlay transparent to the mouse. When
+    // the timer reaches zero, keep the overlay clickable so the user can start
+    // the break with the same single click that acknowledges the alert. The
+    // user's Click-Through preference is not changed.
+    private func applyMousePassthrough() {
+        guard let window = window else { return }
+        let finishedTimerNeedsClick = TimeController.shared.timerState == .finished
+        window.ignoresMouseEvents = s.isClickThrough && !finishedTimerNeedsClick
     }
 
     private func startBurnInTimer() {
