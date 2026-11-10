@@ -146,13 +146,10 @@ final class ClockSettings: ObservableObject {
         timerSoundEnabled = bool("timerSoundEnabled", default: true)
         workStartManual   = bool("workStartManual",   default: false)
         let now = Date()
-        // Preserve today's value when upgrading from the old uptime-based
-        // calculation. From the next day on this is a persisted real start.
-        let legacyStart = now.addingTimeInterval(-ProcessInfo.processInfo.systemUptime)
         let storedStart = dbl("workSessionStart", default: 0)
         let candidateStart = storedStart > 0
             ? Date(timeIntervalSince1970: storedStart)
-            : legacyStart
+            : now
         let resolvedStart = Self.normalizedWorkSessionStart(candidateStart, now: now)
         workSessionStart  = resolvedStart
         let activeTime = Calendar.current.dateComponents([.hour, .minute], from: resolvedStart)
