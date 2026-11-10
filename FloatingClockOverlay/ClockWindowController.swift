@@ -153,6 +153,12 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
                 name: NSWorkspace.didWakeNotification,
                 object: nil
             )
+            NSWorkspace.shared.notificationCenter.addObserver(
+                self,
+                selector: #selector(handleScreensDidWake),
+                name: NSWorkspace.screensDidWakeNotification,
+                object: nil
+            )
             NotificationCenter.default.addObserver(
                 self,
                 selector: #selector(handleScreenParametersChanged),
@@ -177,6 +183,18 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
 
     @objc private func handleDidWake(_ notification: Notification) {
         restoreAfterDisplayChange()
+        // Fallback for wake paths where screensDidWake is delayed or absent.
+        // The display check keeps a DarkWake from starting the work session.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            ClockSettings.shared.refreshWorkSessionStartIfNeeded(requireAwakeDisplay: true)
+        }
+    }
+
+    // A full display wake is the point where the user can actually start
+    // working. DarkWake does not post this notification, so maintenance wakes
+    // cannot move the work-time start earlier.
+    @objc private func handleScreensDidWake(_ notification: Notification) {
+        ClockSettings.shared.refreshWorkSessionStartIfNeeded()
     }
 
     @objc private func handleScreenParametersChanged(_ notification: Notification) {

@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import ServiceManagement
+import CoreGraphics
 
 enum OverlayPaneKind: String, CaseIterable {
     case workTime
@@ -66,6 +67,7 @@ final class ClockSettings: ObservableObject {
     @Published var workStartManual: Bool
     @Published var workStartHour:   Int
     @Published var workStartMinute: Int
+    @Published var workSessionStart: Date
 
     // MARK: - Window / Size
     @Published var sizePreset:      SizePreset
@@ -93,6 +95,7 @@ final class ClockSettings: ObservableObject {
     @Published var mirrorToAllDisplays: Bool
 
     private var cancellables = Set<AnyCancellable>()
+    private var dayChangeObserver: NSObjectProtocol?
 
     private init() {
         let d = UserDefaults.standard
@@ -142,8 +145,17 @@ final class ClockSettings: ObservableObject {
         breakMinutes      = int("breakMinutes",      default: 5)
         timerSoundEnabled = bool("timerSoundEnabled", default: true)
         workStartManual   = bool("workStartManual",   default: false)
-        let activeStart = Date().addingTimeInterval(-ProcessInfo.processInfo.systemUptime)
-        let activeTime = Calendar.current.dateComponents([.hour, .minute], from: activeStart)
+        let now = Date()
+        // Preserve today's value when upgrading from the old uptime-based
+        // calculation. From the next day on this is a persisted real start.
+        let legacyStart = now.addingTimeInterval(-ProcessInfo.processInfo.systemUptime)
+        let storedStart = dbl("workSessionStart", default: 0)
+        let candidateStart = storedStart > 0
+            ? Date(timeIntervalSince1970: storedStart)
+            : legacyStart
+        let resolvedStart = Self.normalizedWorkSessionStart(candidateStart, now: now)
+        workSessionStart  = resolvedStart
+        let activeTime = Calendar.current.dateComponents([.hour, .minute], from: resolvedStart)
         workStartHour     = int("workStartHour",      default: activeTime.hour ?? 8)
         workStartMinute   = int("workStartMinute",    default: activeTime.minute ?? 0)
         sizePreset        = SizePreset(rawValue: str("sizePreset") ?? "") ?? .medium
@@ -165,6 +177,7 @@ final class ClockSettings: ObservableObject {
         clockLanguage       = str("clockLanguage") ?? ""
 
         setupPersistence()
+        d.set(workSessionStart.timeIntervalSince1970, forKey: "workSessionStart")
     }
 
     private func setupPersistence() {
@@ -216,6 +229,7 @@ final class ClockSettings: ObservableObject {
         $workStartManual  .dropFirst().sink { d.set($0, forKey: "workStartManual")   }.store(in: &cancellables)
         $workStartHour    .dropFirst().sink { d.set($0, forKey: "workStartHour")     }.store(in: &cancellables)
         $workStartMinute  .dropFirst().sink { d.set($0, forKey: "workStartMinute")   }.store(in: &cancellables)
+        $workSessionStart .dropFirst().sink { d.set($0.timeIntervalSince1970, forKey: "workSessionStart") }.store(in: &cancellables)
         $sizePreset       .dropFirst().sink { d.set($0.rawValue, forKey: "sizePreset")          }.store(in: &cancellables)
         $customWidth      .dropFirst().sink { d.set($0, forKey: "customWidth")      }.store(in: &cancellables)
         $customHeight     .dropFirst().sink { d.set($0, forKey: "customHeight")     }.store(in: &cancellables)
@@ -233,6 +247,14 @@ final class ClockSettings: ObservableObject {
         $windowScreenName    .dropFirst().sink { d.set($0, forKey: "windowScreenName")    }.store(in: &cancellables)
         $mirrorToAllDisplays .dropFirst().sink { d.set($0, forKey: "mirrorToAllDisplays") }.store(in: &cancellables)
         $clockLanguage       .dropFirst().sink { d.set($0, forKey: "clockLanguage")      }.store(in: &cancellables)
+
+        dayChangeObserver = NotificationCenter.default.addObserver(
+            forName: .NSCalendarDayChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refreshWorkSessionStartIfNeeded(requireAwakeDisplay: true)
+        }
     }
 
     // MARK: - Computed Color Helpers
@@ -294,9 +316,42 @@ final class ClockSettings: ObservableObject {
 
     // MARK: - Work Time
 
+    private static func normalizedWorkSessionStart(_ candidate: Date, now: Date) -> Date {
+        let calendar = Calendar.current
+        guard calendar.isDate(candidate, inSameDayAs: now), candidate <= now else {
+            return now
+        }
+        return candidate
+    }
+
+    /// Starts a new daily session after midnight or after the first full screen
+    /// wake of the day. It deliberately does not react to DarkWake: a
+    /// maintenance wake must not make the work-time pane start counting.
+    func refreshWorkSessionStartIfNeeded(now: Date = Date(), requireAwakeDisplay: Bool = false) {
+        if requireAwakeDisplay && !Self.hasAwakeDisplay() { return }
+        let calendar = Calendar.current
+        if !calendar.isDate(workSessionStart, inSameDayAs: now) || workSessionStart > now {
+            workSessionStart = now
+        }
+    }
+
+    private static func hasAwakeDisplay() -> Bool {
+        NSScreen.screens.contains { screen in
+            guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+            else { return false }
+            return CGDisplayIsAsleep(CGDirectDisplayID(number.uint32Value)) == 0
+        }
+    }
+
     func workStartDate(now: Date = Date()) -> Date {
         guard workStartManual else {
-            return now.addingTimeInterval(-ProcessInfo.processInfo.systemUptime)
+            // Read-only fallback in case the day-change/wake observer has not
+            // fired yet. The observer persists the new value shortly after.
+            let calendar = Calendar.current
+            guard calendar.isDate(workSessionStart, inSameDayAs: now),
+                  workSessionStart <= now
+            else { return now }
+            return workSessionStart
         }
         var components = Calendar.current.dateComponents([.year, .month, .day], from: now)
         components.hour = min(23, max(0, workStartHour))
@@ -323,6 +378,7 @@ final class ClockSettings: ObservableObject {
 
     func resetWorkTimeStart() {
         workStartManual = false
+        refreshWorkSessionStartIfNeeded()
     }
 
     private static let clockFormatter: DateFormatter = {
