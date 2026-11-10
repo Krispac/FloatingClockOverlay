@@ -56,20 +56,20 @@ struct ClockView: View {
     // MARK: - Card
 
     private struct Pane: Identifiable {
-        let mode: OverlayMode
-        let isCompanion: Bool
-        var id: String { isCompanion ? "clock" : "primary" }
+        let kind: OverlayPaneKind
+        var id: String { kind.rawValue }
+
+        var mode: OverlayMode? {
+            switch kind {
+            case .workTime: return nil
+            case .primary:  return ClockSettings.shared.overlayMode
+            case .clock:    return .clock
+            }
+        }
     }
 
     private var panes: [Pane] {
-        var result: [Pane] = []
-        if s.showPrimaryPane {
-            result.append(Pane(mode: s.overlayMode, isCompanion: false))
-        }
-        if s.isClockCompanionVisible {
-            result.append(Pane(mode: .clock, isCompanion: true))
-        }
-        return result
+        s.visiblePaneKinds.map { Pane(kind: $0) }
     }
 
     // The card fills whatever frame the window gives it. When both panes are
@@ -88,10 +88,17 @@ struct ClockView: View {
             }
 
             if panes.count > 1 {
-                Rectangle()
-                    .fill(style.textColor.opacity(0.10))
-                    .frame(width: 1)
-                    .padding(.vertical, 10)
+                GeometryReader { geo in
+                    ForEach(1..<panes.count, id: \.self) { index in
+                        Rectangle()
+                            .fill(style.textColor.opacity(0.10))
+                            .frame(width: 1, height: max(0, geo.size.height - 20))
+                            .position(
+                                x: geo.size.width * CGFloat(index) / CGFloat(panes.count),
+                                y: geo.size.height / 2
+                            )
+                    }
+                }
             }
 
             HStack(spacing: 0) {
@@ -141,18 +148,28 @@ struct ClockView: View {
 
     // MARK: - Pane content
 
+    @ViewBuilder
     private func paneContent(_ pane: Pane, _ style: ThemeStyle) -> some View {
-        let flashing = pane.mode == .timer && tc.timerState == .finished
+        switch pane.kind {
+        case .workTime:
+            workTimePaneContent(style)
+        case .primary, .clock:
+            standardPaneContent(mode: pane.mode ?? .clock, style: style)
+        }
+    }
+
+    private func standardPaneContent(mode: OverlayMode, style: ThemeStyle) -> some View {
+        let flashing = mode == .timer && tc.timerState == .finished
         let glowOn = flashing ? flashOn : true
 
         return VStack(spacing: 2) {
-            Text(displayString(for: pane.mode))
+            Text(displayString(for: mode))
                 .font(.system(size: s.fontSize,
                               weight: timeWeight,
                               design: timeDesign)
                       .monospacedDigit())
                 .tracking(timeTracking)
-                .foregroundColor(activeTextColor(style, mode: pane.mode))
+                .foregroundColor(activeTextColor(style, mode: mode))
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.4)
                 .lineLimit(1)
@@ -167,25 +184,63 @@ struct ClockView: View {
                     x: 0, y: style.useNeonGlow ? 0 : 4
                 )
 
-            if s.showDayOfWeek && pane.mode == .clock {
+            if s.showDayOfWeek && mode == .clock {
                 Text(dayOfWeekString)
                     .font(.system(size: max(9, s.fontSize * 0.22),
                                   weight: .medium, design: labelDesign))
-                    .foregroundStyle(activeTextColor(style, mode: pane.mode).opacity(0.6))
+                    .foregroundStyle(activeTextColor(style, mode: mode).opacity(0.6))
                     .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
             }
 
-            if s.selectedTheme == .weather && pane.mode == .clock {
+            if s.selectedTheme == .weather && mode == .clock {
                 WeatherTemperatureLabel()
             }
 
-            if pane.mode != .clock {
-                Text(modeBadge(for: pane.mode))
+            if mode != .clock {
+                Text(modeBadge(for: mode))
                     .font(.system(size: max(9, s.fontSize * 0.18),
                                   weight: .medium, design: badgeDesign))
                     .tracking(badgeTracking)
                     .foregroundStyle(style.textColor.opacity(0.5))
             }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+
+    private func workTimePaneContent(_ style: ThemeStyle) -> some View {
+        let roundedMinutes = s.workElapsedRoundedUpMinutes(now: clockTime)
+        let hours = roundedMinutes / 60
+        let minutes = roundedMinutes % 60
+        let valueColor = s.adaptiveColor ? adaptiveTextColor : style.textColor
+
+        return VStack(spacing: 2) {
+            Text(String(format: "%d:%02d h", hours, minutes))
+                .font(.system(size: s.fontSize * 0.72,
+                              weight: timeWeight,
+                              design: timeDesign)
+                      .monospacedDigit())
+                .tracking(timeTracking)
+                .foregroundColor(valueColor)
+                .multilineTextAlignment(.center)
+                .minimumScaleFactor(0.34)
+                .lineLimit(1)
+                .shadow(
+                    color: glowOrShadow(style, opacity: 0.5),
+                    radius: style.useNeonGlow ? 10 : 3,
+                    x: 0, y: style.useNeonGlow ? 0 : 1
+                )
+
+            Text("START \(s.workStartClockString(now: clockTime))")
+                .font(.system(size: max(9, s.fontSize * 0.2),
+                              weight: .medium,
+                              design: labelDesign)
+                      .monospacedDigit())
+                .tracking(badgeTracking)
+                .foregroundStyle(valueColor.opacity(0.62))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -204,7 +259,8 @@ struct ClockView: View {
             }
             .padding(8)
 
-            if pane.mode != .clock {
+            if pane.kind == .workTime && s.workStartManual ||
+               pane.kind == .primary && s.overlayMode != .clock {
                 VStack {
                     Spacer()
                     HStack {

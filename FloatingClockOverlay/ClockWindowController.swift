@@ -16,12 +16,13 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     private var isDVDBouncing = false
     private var isRestoringPosition = true
     private var dvdLastTimestamp: TimeInterval = 0
-    private var lastPrimaryVisible = true
-    private var lastCompanionVisible = false
+    private var lastVisiblePanes: [OverlayPaneKind] = []
     private var isUpdatingPaneLayout = false
     private var isApplyingProgrammaticFrame = false
+    private let restoresSavedPosition: Bool
 
-    init() {
+    init(restoresSavedPosition: Bool = true) {
+        self.restoresSavedPosition = restoresSavedPosition
         let window = ClockWindow(
             contentRect: .zero,
             styleMask: [.borderless, .resizable],
@@ -58,8 +59,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         window.maxSize = NSSize(width: 3000, height: 1000)
 
         window.contentView = NSHostingView(rootView: ClockView())
-        lastPrimaryVisible = s.showPrimaryPane
-        lastCompanionVisible = s.isClockCompanionVisible
+        lastVisiblePanes = s.visiblePaneKinds
 
         isRestoringPosition = true
         if s.isFullScreen {
@@ -139,6 +139,27 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
             name: NSWorkspace.didActivateApplicationNotification,
             object: nil
         )
+
+        if restoresSavedPosition {
+            NSWorkspace.shared.notificationCenter.addObserver(
+                self,
+                selector: #selector(handleWillSleep),
+                name: NSWorkspace.willSleepNotification,
+                object: nil
+            )
+            NSWorkspace.shared.notificationCenter.addObserver(
+                self,
+                selector: #selector(handleDidWake),
+                name: NSWorkspace.didWakeNotification,
+                object: nil
+            )
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleScreenParametersChanged),
+                name: NSApplication.didChangeScreenParametersNotification,
+                object: nil
+            )
+        }
     }
 
     @objc private func bringToFront() {
@@ -147,6 +168,46 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             // orderFrontRegardless bypasses the normal "active app" restriction.
             self?.window?.orderFrontRegardless()
+        }
+    }
+
+    @objc private func handleWillSleep(_ notification: Notification) {
+        savePosition()
+    }
+
+    @objc private func handleDidWake(_ notification: Notification) {
+        restoreAfterDisplayChange()
+    }
+
+    @objc private func handleScreenParametersChanged(_ notification: Notification) {
+        restoreAfterDisplayChange()
+    }
+
+    // macOS can reflow borderless windows when displays go to sleep or the
+    // monitor layout changes. Reapply the last user position after the display
+    // stack has settled, using the saved screen-relative coordinates.
+    private func restoreAfterDisplayChange() {
+        for delay in [0.8, 2.5] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.restoreSavedWindowPosition()
+            }
+        }
+    }
+
+    private func restoreSavedWindowPosition() {
+        guard let window = window, !s.isFullScreen else { return }
+        if restoreToSavedScreen(window) { return }
+
+        let savedFrame = NSRect(
+            origin: NSPoint(x: s.windowX, y: s.windowY),
+            size: window.frame.size
+        )
+        if NSScreen.screens.contains(where: { $0.visibleFrame.intersects(savedFrame) }) {
+            isRestoringPosition = true
+            window.setFrameOrigin(savedFrame.origin)
+            isRestoringPosition = false
+        } else {
+            clampToScreen(window)
         }
     }
 
@@ -186,6 +247,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         Publishers.MergeMany(
             s.$showPrimaryPane.map   { _ in () }.eraseToAnyPublisher(),
             s.$showClockCompanion.map { _ in () }.eraseToAnyPublisher(),
+            s.$showWorkTimePane.map   { _ in () }.eraseToAnyPublisher(),
             s.$overlayMode.map       { _ in () }.eraseToAnyPublisher()
         )
         .receive(on: DispatchQueue.main)
@@ -302,13 +364,11 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     private func updatePaneLayout() {
         guard let window = window, !s.isFullScreen else { return }
 
-        let primary = s.showPrimaryPane
-        let companion = s.isClockCompanionVisible
-        let count = s.visiblePaneCount
+        let newPanes = s.visiblePaneKinds
+        let count = newPanes.count
 
         if count == 0 {
-            lastPrimaryVisible = false
-            lastCompanionVisible = false
+            lastVisiblePanes = []
             window.orderOut(nil)
             return
         }
@@ -318,16 +378,18 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         let oldFrame = window.frame
         var origin = oldFrame.origin
 
-        // Keep the surviving pane where it was when the other one is closed.
-        if lastPrimaryVisible && lastCompanionVisible {
-            if !primary && companion {
-                // Closing the left pane keeps the clock pane where it was.
-                origin.x += oldFrame.width - newWidth
-            }
-        } else if !lastPrimaryVisible && lastCompanionVisible {
-            if primary && companion {
-                // The primary pane is added on the left; the clock stays in place.
-                origin.x -= pane.width
+        // Keep a surviving pane at its exact screen position when panes are
+        // added or removed. The first shared pane is the reference; if a new
+        // pane appears on the left, that shifts the window left instead.
+        if !lastVisiblePanes.isEmpty {
+            let shared = newPanes.first { lastVisiblePanes.contains($0) }
+                ?? lastVisiblePanes.first { newPanes.contains($0) }
+            if let shared,
+               let oldIndex = lastVisiblePanes.firstIndex(of: shared),
+               let newIndex = newPanes.firstIndex(of: shared) {
+                let oldPaneWidth = oldFrame.width / CGFloat(max(1, lastVisiblePanes.count))
+                let sharedX = oldFrame.origin.x + CGFloat(oldIndex) * oldPaneWidth
+                origin.x = sharedX - CGFloat(newIndex) * pane.width
             }
         }
 
@@ -337,8 +399,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         isUpdatingPaneLayout = false
 
         clampToScreen(window)
-        lastPrimaryVisible = primary
-        lastCompanionVisible = companion
+        lastVisiblePanes = newPanes
 
         if s.isVisible { window.orderFrontRegardless() }
         savePosition()
@@ -648,8 +709,7 @@ class ClockWindow: NSWindow {
 
     private struct PaneHitArea {
         let frame: NSRect
-        let mode: OverlayMode
-        let isPrimary: Bool
+        let kind: OverlayPaneKind
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -665,7 +725,7 @@ class ClockWindow: NSWindow {
             return
         }
 
-        if let pane = pane, pane.mode != .clock, resetRect(for: pane).contains(loc) {
+        if let pane = pane, hasResetControl(pane), resetRect(for: pane).contains(loc) {
             if event.clickCount == 1 {
                 pendingSingleClick?.cancel()
                 pendingSingleClick = nil
@@ -693,19 +753,13 @@ class ClockWindow: NSWindow {
 
         let startOrigin = frame.origin
         performDrag(with: event)
-        scheduleSingleClick(from: startOrigin, togglesTimer: pane?.isPrimary == true)
+        scheduleSingleClick(from: startOrigin, togglesTimer: pane?.kind == .primary)
     }
 
-    // Pane order matches ClockView.panes: primary first, clock companion second.
+    // Pane order matches ClockView.panes: work time, primary, clock companion.
     private var paneHitAreas: [PaneHitArea] {
         let settings = ClockSettings.shared
-        var panes: [(OverlayMode, Bool)] = []
-        if settings.showPrimaryPane {
-            panes.append((settings.overlayMode, true))
-        }
-        if settings.isClockCompanionVisible {
-            panes.append((.clock, false))
-        }
+        let panes = settings.visiblePaneKinds
         guard !panes.isEmpty else { return [] }
 
         let width = frame.width / CGFloat(panes.count)
@@ -713,8 +767,7 @@ class ClockWindow: NSWindow {
             PaneHitArea(
                 frame: NSRect(x: CGFloat(index) * width, y: 0,
                               width: width, height: frame.height),
-                mode: pane.0,
-                isPrimary: pane.1
+                kind: pane
             )
         }
     }
@@ -739,6 +792,14 @@ class ClockWindow: NSWindow {
             .insetBy(dx: -controlHitPadding, dy: -controlHitPadding)
     }
 
+    private func hasResetControl(_ pane: PaneHitArea) -> Bool {
+        switch pane.kind {
+        case .workTime: return ClockSettings.shared.workStartManual
+        case .primary:  return ClockSettings.shared.overlayMode != .clock
+        case .clock:    return false
+        }
+    }
+
     private func scheduleSingleClick(from startOrigin: NSPoint, togglesTimer: Bool) {
         pendingSingleClick?.cancel()
         guard togglesTimer else { return }
@@ -758,9 +819,12 @@ class ClockWindow: NSWindow {
 
     private func closePane(_ pane: PaneHitArea) {
         let settings = ClockSettings.shared
-        if pane.isPrimary {
+        switch pane.kind {
+        case .workTime:
+            settings.showWorkTimePane = false
+        case .primary:
             settings.showPrimaryPane = false
-        } else {
+        case .clock:
             settings.showClockCompanion = false
         }
     }
@@ -790,10 +854,17 @@ class ClockWindow: NSWindow {
 
     private func resetPane(_ pane: PaneHitArea) {
         let tc = TimeController.shared
-        switch pane.mode {
-        case .timer:     tc.timerReset()
-        case .stopwatch: tc.stopwatchReset()
-        case .clock:     break
+        switch pane.kind {
+        case .workTime:
+            ClockSettings.shared.resetWorkTimeStart()
+        case .primary:
+            switch ClockSettings.shared.overlayMode {
+            case .timer:     tc.timerReset()
+            case .stopwatch: tc.stopwatchReset()
+            case .clock:     break
+            }
+        case .clock:
+            break
         }
     }
 }

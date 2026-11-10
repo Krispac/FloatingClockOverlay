@@ -40,6 +40,7 @@ struct SettingsView: View {
                     switch tab {
                     case .clock:
                         modeSection
+                        workTimeSection
                         timeSection
                     case .look:
                         themeSection
@@ -144,6 +145,54 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    private var workTimeSection: some View {
+        SettingsCard(label: "WORK TIME PANE", icon: "briefcase") {
+            VStack(spacing: 0) {
+                ToggleRow(icon: "rectangle.split.3x1",
+                          label: "Show Work Time Pane",
+                          value: $s.showWorkTimePane)
+                SettingsDivider()
+                ToggleRow(icon: "hand.point.up.left",
+                          label: "Manual Start Time",
+                          value: $s.workStartManual,
+                          hint: "When off, the pane uses active system time, excluding sleep")
+                SettingsDivider()
+                if s.workStartManual {
+                    SettingsRow(icon: "clock", label: "Start Time") {
+                        DatePicker("", selection: workStartDateBinding,
+                                   displayedComponents: .hourAndMinute)
+                            .labelsHidden()
+                            .datePickerStyle(.field)
+                            .frame(width: 110)
+                    }
+                } else {
+                    SettingsRow(icon: "power", label: "Detected Start") {
+                        Text(s.detectedWorkStartClockString())
+                            .font(.callout.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var workStartDateBinding: Binding<Date> {
+        Binding(
+            get: {
+                let now = Date()
+                return Calendar.current.date(bySettingHour: s.workStartHour,
+                                             minute: s.workStartMinute,
+                                             second: 0,
+                                             of: now) ?? now
+            },
+            set: { date in
+                let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+                s.workStartHour = components.hour ?? 0
+                s.workStartMinute = components.minute ?? 0
+            }
+        )
     }
 
     private var timeSection: some View {

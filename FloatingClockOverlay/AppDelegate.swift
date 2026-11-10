@@ -27,6 +27,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var swResetItem:       NSMenuItem?
     private var themeMenuItem:     NSMenuItem?
     private var sizeMenuItem:      NSMenuItem?
+    private var workTimePaneItem:  NSMenuItem?
     private var primaryPaneItem:   NSMenuItem?
     private var clockPaneItem:     NSMenuItem?
 
@@ -215,14 +216,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func buildPanelsMenu() -> NSMenu {
         let m = NSMenu()
+        let workTime = NSMenuItem(title: NSLocalizedString("Work Time Pane", comment: ""),
+                                  action: #selector(toggleWorkTimePane), keyEquivalent: "")
         let primary = NSMenuItem(title: NSLocalizedString("Timer Pane", comment: ""),
                                  action: #selector(togglePrimaryPane), keyEquivalent: "")
         let clock = NSMenuItem(title: NSLocalizedString("Side Clock Pane", comment: ""),
                                action: #selector(toggleClockPane), keyEquivalent: "")
+        workTime.target = self
         primary.target = self
         clock.target = self
+        workTimePaneItem = workTime
         primaryPaneItem = primary
         clockPaneItem = clock
+        m.addItem(workTime)
         m.addItem(primary)
         m.addItem(clock)
         return m
@@ -254,6 +260,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         stopwatchModeItem?.state = s.overlayMode == .stopwatch ? .on : .off
 
         primaryPaneItem?.title   = primaryPaneLabel(for: s.overlayMode)
+        workTimePaneItem?.state  = s.showWorkTimePane ? .on : .off
         primaryPaneItem?.state   = s.showPrimaryPane ? .on : .off
         clockPaneItem?.state     = s.isClockCompanionVisible ? .on : .off
         clockPaneItem?.isEnabled = s.overlayMode != .clock
@@ -356,6 +363,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if s.showPrimaryPane { s.isVisible = true }
     }
 
+    @objc private func toggleWorkTimePane() {
+        let s = ClockSettings.shared
+        s.showWorkTimePane.toggle()
+        if s.showWorkTimePane { s.isVisible = true }
+    }
+
     @objc private func toggleClockPane() {
         let s = ClockSettings.shared
         guard s.overlayMode != .clock else { return }
@@ -417,7 +430,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for screen in NSScreen.screens {
             if screen == mainScreen { continue }
             let name = screen.localizedName
-            let controller = ClockWindowController()
+            let controller = ClockWindowController(restoresSavedPosition: false)
 
             // Position the mirror at the saved offset for this screen, or center-top
             let d = UserDefaults.standard

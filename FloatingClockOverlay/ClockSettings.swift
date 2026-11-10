@@ -2,6 +2,12 @@ import SwiftUI
 import Combine
 import ServiceManagement
 
+enum OverlayPaneKind: String, CaseIterable {
+    case workTime
+    case primary
+    case clock
+}
+
 // Single source of truth for all user preferences — persisted to UserDefaults.
 final class ClockSettings: ObservableObject {
     static let shared = ClockSettings()
@@ -10,6 +16,7 @@ final class ClockSettings: ObservableObject {
     @Published var isVisible:       Bool
     @Published var showPrimaryPane: Bool
     @Published var showClockCompanion: Bool
+    @Published var showWorkTimePane: Bool
     @Published var isClickThrough:  Bool
     @Published var showInDock:      Bool
     @Published var launchAtLogin:   Bool
@@ -56,6 +63,9 @@ final class ClockSettings: ObservableObject {
     @Published var timerSeconds:    Int
     @Published var breakMinutes:    Int
     @Published var timerSoundEnabled: Bool
+    @Published var workStartManual: Bool
+    @Published var workStartHour:   Int
+    @Published var workStartMinute: Int
 
     // MARK: - Window / Size
     @Published var sizePreset:      SizePreset
@@ -94,6 +104,7 @@ final class ClockSettings: ObservableObject {
         isVisible         = bool("isVisible",         default: true)
         showPrimaryPane   = bool("showPrimaryPane",   default: true)
         showClockCompanion = bool("showClockCompanion", default: true)
+        showWorkTimePane  = bool("showWorkTimePane",  default: true)
         isClickThrough    = bool("isClickThrough",    default: true)
         showInDock        = bool("showInDock",        default: true)
         launchAtLogin     = bool("launchAtLogin",     default: false)
@@ -130,6 +141,11 @@ final class ClockSettings: ObservableObject {
         timerSeconds      = int("timerSeconds",      default: 0)
         breakMinutes      = int("breakMinutes",      default: 5)
         timerSoundEnabled = bool("timerSoundEnabled", default: true)
+        workStartManual   = bool("workStartManual",   default: false)
+        let activeStart = Date().addingTimeInterval(-ProcessInfo.processInfo.systemUptime)
+        let activeTime = Calendar.current.dateComponents([.hour, .minute], from: activeStart)
+        workStartHour     = int("workStartHour",      default: activeTime.hour ?? 8)
+        workStartMinute   = int("workStartMinute",    default: activeTime.minute ?? 0)
         sizePreset        = SizePreset(rawValue: str("sizePreset") ?? "") ?? .medium
         customWidth       = dbl("customWidth",       default: 260.0)
         customHeight      = dbl("customHeight",      default: 70.0)
@@ -162,6 +178,7 @@ final class ClockSettings: ObservableObject {
         }.store(in: &cancellables)
         $showPrimaryPane  .dropFirst().sink { d.set($0, forKey: "showPrimaryPane")   }.store(in: &cancellables)
         $showClockCompanion.dropFirst().sink { d.set($0, forKey: "showClockCompanion") }.store(in: &cancellables)
+        $showWorkTimePane .dropFirst().sink { d.set($0, forKey: "showWorkTimePane") }.store(in: &cancellables)
         $isClickThrough   .dropFirst().sink { d.set($0, forKey: "isClickThrough")    }.store(in: &cancellables)
         $showInDock       .dropFirst().sink { d.set($0, forKey: "showInDock")        }.store(in: &cancellables)
         $launchAtLogin    .dropFirst().sink { d.set($0, forKey: "launchAtLogin")     }.store(in: &cancellables)
@@ -196,6 +213,9 @@ final class ClockSettings: ObservableObject {
         $timerSeconds     .dropFirst().sink { d.set($0, forKey: "timerSeconds")     }.store(in: &cancellables)
         $breakMinutes     .dropFirst().sink { d.set($0, forKey: "breakMinutes")     }.store(in: &cancellables)
         $timerSoundEnabled.dropFirst().sink { d.set($0, forKey: "timerSoundEnabled") }.store(in: &cancellables)
+        $workStartManual  .dropFirst().sink { d.set($0, forKey: "workStartManual")   }.store(in: &cancellables)
+        $workStartHour    .dropFirst().sink { d.set($0, forKey: "workStartHour")     }.store(in: &cancellables)
+        $workStartMinute  .dropFirst().sink { d.set($0, forKey: "workStartMinute")   }.store(in: &cancellables)
         $sizePreset       .dropFirst().sink { d.set($0.rawValue, forKey: "sizePreset")          }.store(in: &cancellables)
         $customWidth      .dropFirst().sink { d.set($0, forKey: "customWidth")      }.store(in: &cancellables)
         $customHeight     .dropFirst().sink { d.set($0, forKey: "customHeight")     }.store(in: &cancellables)
@@ -260,9 +280,57 @@ final class ClockSettings: ObservableObject {
         overlayMode != .clock && showClockCompanion
     }
 
-    var visiblePaneCount: Int {
-        (showPrimaryPane ? 1 : 0) + (isClockCompanionVisible ? 1 : 0)
+    var visiblePaneKinds: [OverlayPaneKind] {
+        var result: [OverlayPaneKind] = []
+        if showWorkTimePane { result.append(.workTime) }
+        if showPrimaryPane { result.append(.primary) }
+        if isClockCompanionVisible { result.append(.clock) }
+        return result
     }
+
+    var visiblePaneCount: Int {
+        visiblePaneKinds.count
+    }
+
+    // MARK: - Work Time
+
+    func workStartDate(now: Date = Date()) -> Date {
+        guard workStartManual else {
+            return now.addingTimeInterval(-ProcessInfo.processInfo.systemUptime)
+        }
+        var components = Calendar.current.dateComponents([.year, .month, .day], from: now)
+        components.hour = min(23, max(0, workStartHour))
+        components.minute = min(59, max(0, workStartMinute))
+        components.second = 0
+        return Calendar.current.date(from: components) ?? now
+    }
+
+    // The pane intentionally has no seconds. Rounding up to the next quarter
+    // keeps the display honest: 1 minute already reads as 15 minutes.
+    func workElapsedRoundedUpMinutes(now: Date = Date()) -> Int {
+        let seconds = max(0, now.timeIntervalSince(workStartDate(now: now)))
+        let minutes = Int(ceil(seconds / 60.0))
+        return Int(ceil(Double(minutes) / 15.0)) * 15
+    }
+
+    func workStartClockString(now: Date = Date()) -> String {
+        Self.clockFormatter.string(from: workStartDate(now: now))
+    }
+
+    func detectedWorkStartClockString() -> String {
+        workStartClockString()
+    }
+
+    func resetWorkTimeStart() {
+        workStartManual = false
+    }
+
+    private static let clockFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "pl_PL")
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
 
     // MARK: - Position Presets (used by ClockWindowController)
 

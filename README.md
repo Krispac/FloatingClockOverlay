@@ -27,12 +27,14 @@ A polished, transparent always-on-top clock overlay for macOS — built with Swi
 - Optional pair of low meditation gong strikes, 10 seconds apart, when the timer or break ends
 - Click-to-start break after the timer, with pause/resume and a 5-minute default
 - Silent macOS notification when the countdown timer finishes
+- **Three joined panes:** work time, primary timer/stopwatch, and side clock
+- **Work-time pane:** `6:45 h` since the active system session (sleep excluded) or a manual start, rounded up to 15 minutes
 - **Adaptive Color** — auto-adjusts text color based on background brightness
 - **Burn-in Prevention** — slowly drifts the clock to protect your display
 - **DVD Bounce Mode** — clock floats around the screen bouncing off edges
 - **Multi-monitor support** — bounces and drags across all connected displays
 - **Double-click to open Settings** — no need to find the menu bar icon
-- **Position memory** — clock remembers its location after restart
+- **Position memory** — remembers its location after restart and restores it after sleep or display changes
 - **Settings window** — every option live-updates the overlay
 - **Menu bar icon** with full quick-access controls (Theme / Size / Mode submenus)
 - Global keyboard shortcut **⌘ ⌥ C** to toggle click-through
