@@ -29,6 +29,7 @@ A polished, transparent always-on-top clock overlay for macOS — built with Swi
 - Silent macOS notification when the countdown timer finishes
 - **Three joined panes:** work time, primary timer/stopwatch, and side clock
 - **Work-time pane:** `6:45 h` since the active system session (sleep excluded) or a manual start, rounded up to 15 minutes
+- **Snap to Top Center:** one click moves the joined panes to the top edge, horizontally centered on the current display
 - **Adaptive Color** — auto-adjusts text color based on background brightness
 - **Burn-in Prevention** — slowly drifts the clock to protect your display
 - **DVD Bounce Mode** — clock floats around the screen bouncing off edges

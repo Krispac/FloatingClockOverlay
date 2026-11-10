@@ -424,7 +424,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func moveToPreset(_ preset: ClockSettings.PositionPreset, save: Bool = true) {
-        guard let window = window, let screen = NSScreen.main else { return }
+        guard let window = window, let screen = window.screen ?? NSScreen.main else { return }
         let f = screen.visibleFrame
         let w = window.frame.width
         let h = window.frame.height
@@ -432,6 +432,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
 
         let origin: NSPoint
         switch preset {
+        case .topCenter:   origin = NSPoint(x: f.midX - w/2,   y: f.maxY - h)
         case .topLeft:     origin = NSPoint(x: f.minX + p,     y: f.maxY - h - p)
         case .topRight:    origin = NSPoint(x: f.maxX - w - p, y: f.maxY - h - p)
         case .bottomLeft:  origin = NSPoint(x: f.minX + p,     y: f.minY + p)

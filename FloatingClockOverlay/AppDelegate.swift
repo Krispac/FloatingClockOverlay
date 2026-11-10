@@ -179,6 +179,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(swStart); menu.addItem(swLap); menu.addItem(swReset)
         menu.addItem(.separator())
 
+        menu.addItem(NSMenuItem(title: NSLocalizedString("Snap to Top Center", comment: ""),
+                                action: #selector(snapToTopCenter), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: NSLocalizedString("Reset Position", comment: ""),
                                 action: #selector(resetPosition), keyEquivalent: ""))
         menu.addItem(.separator())
@@ -321,6 +323,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleClickThrough()  { ClockSettings.shared.isClickThrough.toggle() }
     @objc private func resetPosition() {
         NotificationCenter.default.post(name: .moveToPreset, object: ClockSettings.PositionPreset.reset)
+    }
+
+    @objc private func snapToTopCenter() {
+        NotificationCenter.default.post(name: .moveToPreset, object: ClockSettings.PositionPreset.topCenter)
     }
     @objc private func toggleLaunchAtLogin() {
         let s = ClockSettings.shared

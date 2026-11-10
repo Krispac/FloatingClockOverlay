@@ -448,6 +448,19 @@ struct SettingsView: View {
                 .padding(12)
 
                 SettingsDivider()
+                HStack {
+                    Button {
+                        s.isFullScreen = false
+                        NotificationCenter.default.post(name: .moveToPreset, object: ClockSettings.PositionPreset.topCenter)
+                    } label: {
+                        Label("Snap to Top Center", systemImage: "arrow.up.to.line")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+
                 // Reset
                 HStack {
                     Button {
