@@ -108,9 +108,10 @@ struct ClockView: View {
         VStack(spacing: 2) {
             Text(displayString)
                 .font(.system(size: s.fontSize,
-                              weight: s.fontWeight.weight,
-                              design: s.fontFamily.design))
-                .tracking(s.letterSpacing)
+                              weight: timeWeight,
+                              design: timeDesign)
+                      .monospacedDigit())
+                .tracking(timeTracking)
                 .foregroundColor(activeTextColor(style))
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.4)
@@ -129,7 +130,7 @@ struct ClockView: View {
             if s.showDayOfWeek && s.overlayMode == .clock {
                 Text(dayOfWeekString)
                     .font(.system(size: max(9, s.fontSize * 0.22),
-                                  weight: .medium, design: s.fontFamily.design))
+                                  weight: .medium, design: labelDesign))
                     .foregroundStyle(activeTextColor(style).opacity(0.6))
                     .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
             }
@@ -141,7 +142,8 @@ struct ClockView: View {
             if s.overlayMode != .clock {
                 Text(modeBadge)
                     .font(.system(size: max(9, s.fontSize * 0.18),
-                                  weight: .medium, design: .monospaced))
+                                  weight: .medium, design: badgeDesign))
+                    .tracking(badgeTracking)
                     .foregroundStyle(style.textColor.opacity(0.5))
             }
         }
@@ -258,6 +260,16 @@ struct ClockView: View {
         }
         return style.textColor
     }
+
+    // StandBy is a designed theme: Apple-style SF Pro Thin with tabular digits.
+    // Other themes keep the user's font family and weight.
+    private var isStandByTheme: Bool { s.selectedTheme == .standby }
+    private var timeDesign: Font.Design { isStandByTheme ? .default : s.fontFamily.design }
+    private var timeWeight: Font.Weight { isStandByTheme ? .thin : s.fontWeight.weight }
+    private var timeTracking: Double { isStandByTheme ? max(1.0, s.letterSpacing) : s.letterSpacing }
+    private var labelDesign: Font.Design { isStandByTheme ? .default : s.fontFamily.design }
+    private var badgeDesign: Font.Design { isStandByTheme ? .default : .monospaced }
+    private var badgeTracking: Double { isStandByTheme ? 1.2 : 0 }
 
     private var adaptiveTextColor: Color {
         useWhiteText ? .white : .black

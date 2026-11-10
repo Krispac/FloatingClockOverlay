@@ -193,11 +193,11 @@ extension ClockTheme {
 
         case .standby:
             return ThemeStyle(useVibrancy: false, useGlass: false,
-                              bgColor: Color(hex: "0A0A0C"), bgOpacity: 0.92,
-                              textColor: Color(hex: "FFF4E2"), cornerRadius: cr,
-                              borderColor: Color(hex: "FFD7A1"), borderOpacity: 0.16,
+                              bgColor: Color(hex: "050506"), bgOpacity: 0.96,
+                              textColor: Color(hex: "FFF6E8"), cornerRadius: cr,
+                              borderColor: Color(hex: "FFD7A1"), borderOpacity: 0.08,
                               shadowOpacity: 0,
-                              useNeonGlow: true, glowColor: Color(hex: "FFB15E"))
+                              useNeonGlow: true, glowColor: Color(hex: "FFAE5A"))
 
         case .dark:
             return ThemeStyle(useVibrancy: false, useGlass: false,
@@ -324,24 +324,24 @@ struct StandByBackground: View {
                 .fill(
                     LinearGradient(
                         stops: [
-                            .init(color: Color(hex: "17130F"), location: 0.0),
-                            .init(color: Color(hex: "070708"), location: 1.0),
+                            .init(color: Color(hex: "0C0B0A"), location: 0.0),
+                            .init(color: Color(hex: "020203"), location: 1.0),
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 )
-                .opacity(0.94)
+                .opacity(0.96)
 
             RadialGradient(
                 colors: [
-                    Color(hex: "FFB15E").opacity(0.22),
-                    Color(hex: "FFB15E").opacity(0.05),
+                    Color(hex: "FFB15E").opacity(0.26),
+                    Color(hex: "FFB15E").opacity(0.04),
                     .clear,
                 ],
                 center: UnitPoint(x: 0.5, y: 0.0),
                 startRadius: 0,
-                endRadius: 130
+                endRadius: 140
             )
             .clipShape(RoundedRectangle(cornerRadius: cr, style: .continuous))
 
@@ -349,7 +349,7 @@ struct StandByBackground: View {
                 .strokeBorder(
                     LinearGradient(
                         stops: [
-                            .init(color: Color.white.opacity(0.22), location: 0.0),
+                            .init(color: Color.white.opacity(0.16), location: 0.0),
                             .init(color: Color.white.opacity(0.04), location: 1.0),
                         ],
                         startPoint: .top,

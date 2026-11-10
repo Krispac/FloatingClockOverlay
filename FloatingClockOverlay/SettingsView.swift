@@ -299,6 +299,19 @@ struct SettingsView: View {
                     .labelsHidden()
                     .frame(width: 110)
                 }
+                if s.selectedTheme == .standby {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("StandBy uses its own Apple-style SF Pro typography.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text("Font family and weight apply to the other themes.")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                }
                 SettingsDivider()
                 SliderRow(icon: "textformat.size", label: "Font Size",
                           value: $s.fontSize, range: 16...80,
@@ -577,7 +590,10 @@ struct ThemeCard: View {
             ZStack {
                 preview
                 Text("10:10")
-                    .font(.system(size: 11, weight: .light, design: .monospaced))
+                    .font(theme == .standby
+                          ? .system(size: 12, weight: .thin, design: .default).monospacedDigit()
+                          : .system(size: 11, weight: .light, design: .monospaced))
+                    .tracking(theme == .standby ? 0.4 : 0)
                     .foregroundColor(previewTextColor)
                     .shadow(color: neonColor?.opacity(0.8) ?? .clear, radius: 4)
             }
@@ -613,9 +629,9 @@ struct ThemeCard: View {
             }
         case .standby:
             ZStack {
-                LinearGradient(colors: [Color(hex: "17130F"), Color(hex: "070708")],
+                LinearGradient(colors: [Color(hex: "0C0B0A"), Color(hex: "020203")],
                                startPoint: .top, endPoint: .bottom)
-                RadialGradient(colors: [Color(hex: "FFB15E").opacity(0.24), .clear],
+                RadialGradient(colors: [Color(hex: "FFB15E").opacity(0.28), .clear],
                                center: .top, startRadius: 0, endRadius: 46)
             }
         case .dark:
@@ -651,7 +667,7 @@ struct ThemeCard: View {
         case .weather:        return .white
         case .light:          return Color(white: 0.1)
         case .neon:           return .cyan
-        case .standby:        return Color(hex: "FFF4E2")
+        case .standby:        return Color(hex: "FFF6E8")
         case .toyStory:       return Color(hex: "FFD659")
         case .f1:             return Color(hex: "FFCC00")
         case .naruto:         return Color(hex: "F7F7F7")
@@ -666,7 +682,7 @@ struct ThemeCard: View {
     private var neonColor: Color? {
         switch theme {
         case .neon:           return .cyan
-        case .standby:        return Color(hex: "FFB15E")
+        case .standby:        return Color(hex: "FFAE5A")
         case .toyStory:       return Color(hex: "5CF115")
         case .f1:             return Color(hex: "FF3333")
         case .naruto:         return Color(hex: "53A6FD")
