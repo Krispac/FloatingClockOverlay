@@ -66,7 +66,9 @@ final class TimeController: ObservableObject {
                 timerOvertime        = 0
                 timerState           = .finished
                 sendTimerNotification()
-                GentleGong.shared.play()
+                if ClockSettings.shared.timerSoundEnabled {
+                    GentleGong.shared.play()
+                }
             } else {
                 timerRemaining = rem
             }
@@ -195,7 +197,10 @@ final class TimeController: ObservableObject {
         timerPausedRemaining = d
         timerRemaining       = d
         timerState           = .idle
-        GentleGong.shared.play()
+        // No gong by default: the problem is missed breaks, not long ones.
+        if ClockSettings.shared.breakEndSoundEnabled {
+            GentleGong.shared.play()
+        }
     }
 
     // MARK: - Stopwatch Controls
@@ -263,11 +268,10 @@ final class GentleGong {
 
     func play() {
         stop()
-        guard ClockSettings.shared.timerSoundEnabled else { return }
         playStrike()
 
         let work = DispatchWorkItem { [weak self] in
-            guard let self, ClockSettings.shared.timerSoundEnabled else { return }
+            guard let self else { return }
             self.secondStrike = nil
             self.playStrike()
         }
@@ -276,7 +280,6 @@ final class GentleGong {
     }
 
     private func playStrike() {
-        guard ClockSettings.shared.timerSoundEnabled else { return }
         sound?.stop()
         guard let sound = NSSound(data: audioData) else { return }
         sound.volume = 0.48

@@ -81,6 +81,9 @@ Keep the workspace disposable — the source history is the rollback.
   bundle ID); never test on the installed app.
 - Do not keep `.app` backups in `~/Applications`. Roll back by checking out the
   previous commit and rebuilding.
+- Before swapping the installed app, read the running timer from the screen and
+  restore it after the swap (rounded up to the minute); the timer state lives in
+  memory only.
 - After deploying, remove temp build dirs, test copies and DerivedData, then
   commit and push so the deployed state is reproducible from `main`.
 

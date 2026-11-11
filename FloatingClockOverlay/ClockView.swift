@@ -493,3 +493,32 @@ private struct WindowReader: NSViewRepresentable {
         if v.window !== window { DispatchQueue.main.async { window = v.window } }
     }
 }
+
+// Lives in its own tiny non-activating panel so it stays clickable even when
+// the clock itself is in click-through mode.
+struct TransparencyButtonView: View {
+    @ObservedObject private var s = ClockSettings.shared
+
+    var body: some View {
+        let style = s.selectedTheme.resolved(using: s)
+        let symbol = s.quickDimmed ? "eye.slash" : "eye"
+        let tint = style.textColor
+
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.07))
+            Circle()
+                .strokeBorder(tint.opacity(0.16), lineWidth: 0.5)
+            Image(systemName: symbol)
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(tint.opacity(0.68))
+        }
+        .frame(width: 16, height: 16)
+        .padding(8)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            NotificationCenter.default.post(name: .toggleTransparency, object: nil)
+        }
+        .help(s.quickDimmed ? "Show the clock at full opacity" : "Dim the clock")
+    }
+}

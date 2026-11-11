@@ -57,6 +57,11 @@ struct TimerStopwatchControlsView: View {
                       value: $settings.timerSoundEnabled,
                       hint: "Two low gong strikes, 10 seconds apart")
 
+            ToggleRow(icon: "speaker.slash",
+                      label: "Gong when the break ends",
+                      value: $settings.breakEndSoundEnabled,
+                      hint: "Off by default — the break ending is not the problem")
+
             // Buttons
             HStack(spacing: 8) {
                 timerActionButton
