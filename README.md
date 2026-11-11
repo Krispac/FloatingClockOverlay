@@ -124,6 +124,10 @@ stays top-centre on the next. It only appears when more than one display is
 connected. The saved display is restored after wake, including when the
 external monitor reconnects a few seconds later.
 
+Display decisions are logged to `~/Library/Logs/FloatingClockOverlay-position.log`
+(capped at 48 KB), which is the fastest way to diagnose a wake that lands on
+the wrong screen.
+
 When a countdown reaches zero, the overlay blinks and counts **up** the delay
 until you click it to start the break, so a postponed break is visible.
 
