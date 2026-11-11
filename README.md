@@ -86,6 +86,10 @@ Keep the workspace disposable — the source history is the rollback.
   memory only.
 - After deploying, remove temp build dirs, test copies and DerivedData, then
   commit and push so the deployed state is reproducible from `main`.
+- Close-out before saying "done": `/tmp` scratch, DerivedData, test `.app`
+  copies, test `com.krispac.fcotest.*` defaults (plus the empty `.plist` stubs
+  `defaults delete` leaves behind) and our own items in the Trash — moving to
+  the Trash does not free any space.
 
 ---
 
