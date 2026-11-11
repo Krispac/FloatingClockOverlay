@@ -109,6 +109,17 @@ Toggle via menu bar → **Toggle Click-Through**, or press **⌘ ⌥ C**.
 
 Or use **Settings → Window → Size** to choose a preset (Small / Medium / Large / Extra Large).
 
+### Moving the clock between displays
+
+The small button in the bottom-left corner cycles the overlay through the
+connected displays and keeps the same relative spot — top-centre on one screen
+stays top-centre on the next. It only appears when more than one display is
+connected. The saved display is restored after wake, including when the
+external monitor reconnects a few seconds later.
+
+When a countdown reaches zero, the overlay blinks and counts **up** the delay
+until you click it to start the break, so a postponed break is visible.
+
 ### Themes
 
 Open **Settings → Appearance** and tap a theme card:

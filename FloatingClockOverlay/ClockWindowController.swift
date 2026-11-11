@@ -119,6 +119,10 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         if s.windowScreenName != targetScreen.localizedName {
             s.windowScreenName = targetScreen.localizedName
         }
+        let targetID = Self.displayID(of: targetScreen)
+        if targetID != 0, s.windowScreenID != targetID {
+            s.windowScreenID = targetID
+        }
         PositionLog.write("restored to \(targetScreen.localizedName) origin=\(Int(origin.x)),\(Int(origin.y))")
         return true
     }
