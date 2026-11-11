@@ -40,8 +40,6 @@ final class ClockSettings: ObservableObject {
 
     // MARK: - Appearance (shared across themes)
     @Published var windowOpacity:   Double
-    // Quick dim from the on-screen button; independent of the saved opacity.
-    @Published var quickDimmed:     Bool
     @Published var backgroundOpacity: Double
     @Published var textColorRed:    Double
     @Published var textColorGreen:  Double
@@ -150,7 +148,6 @@ final class ClockSettings: ObservableObject {
         breakMinutes      = int("breakMinutes",      default: 5)
         timerSoundEnabled = bool("timerSoundEnabled", default: true)
         breakEndSoundEnabled = bool("breakEndSoundEnabled", default: false)
-        quickDimmed       = bool("quickDimmed",       default: false)
         workStartManual   = bool("workStartManual",   default: false)
         let now = Date()
         let storedStart = dbl("workSessionStart", default: 0)
@@ -248,7 +245,6 @@ final class ClockSettings: ObservableObject {
         $breakMinutes     .dropFirst().sink { d.set($0, forKey: "breakMinutes")     }.store(in: &cancellables)
         $timerSoundEnabled.dropFirst().sink { d.set($0, forKey: "timerSoundEnabled") }.store(in: &cancellables)
         $breakEndSoundEnabled.dropFirst().sink { d.set($0, forKey: "breakEndSoundEnabled") }.store(in: &cancellables)
-        $quickDimmed      .dropFirst().sink { d.set($0, forKey: "quickDimmed")      }.store(in: &cancellables)
         $workStartManual  .dropFirst().sink { d.set($0, forKey: "workStartManual")   }.store(in: &cancellables)
         $workStartHour    .dropFirst().sink { d.set($0, forKey: "workStartHour")     }.store(in: &cancellables)
         $workStartMinute  .dropFirst().sink { d.set($0, forKey: "workStartMinute")   }.store(in: &cancellables)
@@ -448,5 +444,5 @@ extension Notification.Name {
     static let userDragBegan   = Notification.Name("FloatingClock.userDragBegan")
     static let switchScreen    = Notification.Name("FloatingClock.switchScreen")
     static let userInteraction = Notification.Name("FloatingClock.userInteraction")
-    static let toggleTransparency = Notification.Name("FloatingClock.toggleTransparency")
+    static let toggleClickThrough = Notification.Name("FloatingClock.toggleClickThrough")
 }

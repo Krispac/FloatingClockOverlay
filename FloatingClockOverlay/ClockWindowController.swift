@@ -25,7 +25,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     private var lastVisiblePanes: [OverlayPaneKind] = []
     private var isUpdatingPaneLayout = false
     private var isApplyingProgrammaticFrame = false
-    private var transparencyPanel: TransparencyPanel?
+    private var clickThroughPanel: ClickThroughPanel?
     private let restoresSavedPosition: Bool
 
     init(restoresSavedPosition: Bool = true) {
@@ -80,8 +80,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         if s.isVisible && s.visiblePaneCount > 0 { window.orderFrontRegardless() }
         setupBurnInPrevention()
         setupDVDBounce()
-        setupTransparencyPanel()
-        applyWindowOpacity()
+        setupClickThroughPanel()
     }
 
     // Monitors left of or below the main display have negative coordinates, so
@@ -346,9 +345,9 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
             .store(in: &cancellables)
 
         NotificationCenter.default
-            .publisher(for: .toggleTransparency)
+            .publisher(for: .toggleClickThrough)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.s.quickDimmed.toggle() }
+            .sink { [weak self] _ in self?.s.isClickThrough.toggle() }
             .store(in: &cancellables)
 
         s.$isClickThrough
@@ -366,12 +365,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
 
         s.$windowOpacity
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.applyWindowOpacity() }
-            .store(in: &cancellables)
-
-        s.$quickDimmed
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.applyWindowOpacity() }
+            .sink { [weak self] in self?.window?.alphaValue = $0 }
             .store(in: &cancellables)
 
         s.$isVisible
@@ -383,7 +377,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
                 } else {
                     self.window?.orderOut(nil)
                 }
-                self.updateTransparencyPanel()
+                self.updateClickThroughPanel()
             }
             .store(in: &cancellables)
 
@@ -453,7 +447,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
                 applyPreset(s.sizePreset, animate: animate)
             }
         }
-        updateTransparencyPanel()
+        updateClickThroughPanel()
     }
 
     // MARK: - Size Presets
@@ -547,7 +541,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
 
         if s.isVisible { window.orderFrontRegardless() }
         savePosition()
-        updateTransparencyPanel()
+        updateClickThroughPanel()
     }
 
     private func clampToScreen(_ window: NSWindow) {
@@ -669,24 +663,18 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         window.ignoresMouseEvents = s.isClickThrough && !finishedTimerNeedsClick
     }
 
-    // MARK: - Transparency Button
+    // MARK: - Click-Through Button
 
-    private func applyWindowOpacity() {
-        guard let window = window else { return }
-        let dimmed = s.quickDimmed ? min(s.windowOpacity, 0.32) : s.windowOpacity
-        window.alphaValue = dimmed
-    }
-
-    private func setupTransparencyPanel() {
-        guard transparencyPanel == nil, let window = window else { return }
-        let panel = TransparencyPanel()
-        transparencyPanel = panel
+    private func setupClickThroughPanel() {
+        guard clickThroughPanel == nil, let window = window else { return }
+        let panel = ClickThroughPanel()
+        clickThroughPanel = panel
         window.addChildWindow(panel, ordered: .above)
-        updateTransparencyPanel()
+        updateClickThroughPanel()
     }
 
-    private func updateTransparencyPanel() {
-        guard let window = window, let panel = transparencyPanel else { return }
+    private func updateClickThroughPanel() {
+        guard let window = window, let panel = clickThroughPanel else { return }
         let shouldShow = s.isVisible && !s.isFullScreen && s.visiblePaneCount > 0
             && window.isVisible
         guard shouldShow else {
@@ -934,7 +922,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
 
     func windowDidResize(_ notification: Notification) {
         guard !s.isFullScreen, !isUpdatingPaneLayout, !isApplyingProgrammaticFrame else { return }
-        updateTransparencyPanel()
+        updateClickThroughPanel()
         if let window = window {
             let paneCount = CGFloat(max(1, s.visiblePaneCount))
             s.customWidth  = Double(window.frame.width / paneCount)
@@ -944,7 +932,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowDidMove(_ notification: Notification) {
-        updateTransparencyPanel()
+        updateClickThroughPanel()
         guard !isDVDBouncing else { return }
         if isUserMovingWindow {
             ignoreSystemPositionSaves = false
@@ -1193,7 +1181,7 @@ class ClockWindow: NSWindow {
 
 // The one control that must keep working in click-through mode, so it lives in
 // its own panel instead of the clock window.
-final class TransparencyPanel: NSPanel {
+final class ClickThroughPanel: NSPanel {
     init() {
         super.init(contentRect: NSRect(x: 0, y: 0, width: 32, height: 32),
                    styleMask: [.borderless, .nonactivatingPanel],
@@ -1205,7 +1193,7 @@ final class TransparencyPanel: NSPanel {
         ignoresMouseEvents = false
         hidesOnDeactivate = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-        contentView = FirstMouseHostingView(rootView: TransparencyButtonView())
+        contentView = FirstMouseHostingView(rootView: ClickThroughButtonView())
     }
 
     override var canBecomeKey: Bool { false }

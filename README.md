@@ -123,6 +123,9 @@ external monitor reconnects a few seconds later.
 When a countdown reaches zero, the overlay blinks and counts **up** the delay
 until you click it to start the break, so a postponed break is visible.
 
+The eye button in the bottom-right corner toggles click-through. It sits in its
+own panel, so it keeps working while the clock itself ignores the mouse.
+
 ### Themes
 
 Open **Settings → Appearance** and tap a theme card:
