@@ -109,6 +109,18 @@ struct ClockView: View {
             }
             .allowsHitTesting(false)
 
+            if NSScreen.screens.count > 1 {
+                VStack {
+                    Spacer()
+                    HStack {
+                        switchScreenControl(style)
+                        Spacer()
+                    }
+                }
+                .padding(8)
+                .allowsHitTesting(false)
+            }
+
             borderLayer(style)
         }
         // Tell the sampler where the card actually sits inside the window; in
@@ -307,6 +319,16 @@ struct ClockView: View {
             .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
     }
 
+    private func switchScreenControl(_ style: ThemeStyle) -> some View {
+        Image(systemName: "rectangle.on.rectangle")
+            .font(.system(size: 8, weight: .semibold))
+            .foregroundStyle(style.textColor.opacity(0.68))
+            .frame(width: 16, height: 16)
+            .background(Circle().fill(Color.white.opacity(0.07)))
+            .overlay(Circle().strokeBorder(style.textColor.opacity(0.16), lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+    }
+
     // MARK: - Border
 
     @ViewBuilder
@@ -322,7 +344,10 @@ struct ClockView: View {
     private func displayString(for mode: OverlayMode) -> String {
         switch mode {
         case .clock:     return clockTimeString
-        case .timer:     return tc.timerRemaining.hmsString
+        case .timer:
+            // Finished = count up the delay before the break, so it is obvious
+            // how long the "finish this first" window has been open.
+            return (tc.timerState == .finished ? tc.timerOvertime : tc.timerRemaining).hmsString
         case .stopwatch: return tc.stopwatchElapsed.hmsString
         }
     }

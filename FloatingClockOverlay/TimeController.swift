@@ -14,8 +14,11 @@ final class TimeController: ObservableObject {
     // MARK: - Timer
     @Published private(set) var timerState:     TimerRunState = .idle
     @Published private(set) var timerRemaining: TimeInterval  = 0
+    // How long ago the countdown hit zero, so the user sees how late the break is.
+    @Published private(set) var timerOvertime:  TimeInterval  = 0
 
     private var timerEndDate:           Date?
+    private var timerFinishedAt:        Date?
     private var timerPausedRemaining:   TimeInterval = 0
     private var breakEndDate:           Date?
     private var breakPausedRemaining:   TimeInterval = 0
@@ -59,6 +62,8 @@ final class TimeController: ObservableObject {
                 timerRemaining       = 0
                 timerPausedRemaining = 0
                 timerEndDate         = nil
+                timerFinishedAt      = Date()
+                timerOvertime        = 0
                 timerState           = .finished
                 sendTimerNotification()
                 GentleGong.shared.play()
@@ -72,6 +77,8 @@ final class TimeController: ObservableObject {
             } else {
                 timerRemaining = rem
             }
+        } else if timerState == .finished, let finished = timerFinishedAt {
+            timerOvertime = Date().timeIntervalSince(finished)
         }
         // Stopwatch
         if stopwatchState == .running, let start = stopwatchStartDate {
@@ -103,6 +110,8 @@ final class TimeController: ObservableObject {
 
     func timerReset() {
         timerEndDate         = nil
+        timerFinishedAt      = nil
+        timerOvertime        = 0
         breakEndDate         = nil
         breakPausedRemaining = 0
         let d                = settingsDuration
@@ -119,6 +128,8 @@ final class TimeController: ObservableObject {
         let d                = settingsDuration
         timerPausedRemaining = d
         timerRemaining       = d
+        timerFinishedAt      = nil
+        timerOvertime        = 0
         if wasFinished {
             timerState = .idle
             GentleGong.shared.stop()
@@ -151,6 +162,8 @@ final class TimeController: ObservableObject {
             return
         }
         GentleGong.shared.stop()
+        timerFinishedAt      = nil
+        timerOvertime        = 0
         breakPausedRemaining = duration
         timerRemaining       = duration
         breakEndDate         = Date().addingTimeInterval(duration)

@@ -17,7 +17,9 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     private var isRestoringPosition = true
     private var pendingSavedScreenRestore = false
     private var positionRestoreTimer: Timer?
-    private var suppressPositionSaveUntil: Date?
+    // Set by every programmatic frame change. Cleared only by a real user drag or
+    // an explicit save, so a system nudge after wake cannot become the new spot.
+    private var ignoreSystemPositionSaves = false
     private var userMoveWorkItem: DispatchWorkItem?
     private var dvdLastTimestamp: TimeInterval = 0
     private var lastVisiblePanes: [OverlayPaneKind] = []
@@ -87,7 +89,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         guard let window = window else { return }
         if restoreToSavedScreen(window, allowClamp: true) { return }
 
-        if !s.windowScreenName.isEmpty {
+        if s.windowScreenID != 0 || !s.windowScreenName.isEmpty {
             // The saved external display is not connected yet. Show a
             // temporary fallback, but keep the saved monitor/offset intact.
             restoreFallback(window)
@@ -98,8 +100,8 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func restoreToSavedScreen(_ window: NSWindow, allowClamp: Bool = false) -> Bool {
-        guard !s.windowScreenName.isEmpty,
-              let targetScreen = NSScreen.screens.first(where: { $0.localizedName == s.windowScreenName })
+        guard s.windowScreenID != 0 || !s.windowScreenName.isEmpty,
+              let targetScreen = savedScreen()
         else { return false }
         var origin = NSPoint(x: targetScreen.frame.origin.x + s.windowScreenOffsetX,
                              y: targetScreen.frame.origin.y + s.windowScreenOffsetY)
@@ -114,6 +116,10 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         isRestoringPosition = true
         window.setFrameOrigin(origin)
         isRestoringPosition = false
+        if s.windowScreenName != targetScreen.localizedName {
+            s.windowScreenName = targetScreen.localizedName
+        }
+        PositionLog.write("restored to \(targetScreen.localizedName) origin=\(Int(origin.x)),\(Int(origin.y))")
         return true
     }
 
@@ -135,7 +141,8 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func beginSavedScreenRestore() {
-        guard !s.windowScreenName.isEmpty else { return }
+        guard s.windowScreenID != 0 || !s.windowScreenName.isEmpty else { return }
+        PositionLog.write("waiting for saved screen id=\(s.windowScreenID) name=\"\(s.windowScreenName)\"; connected=\(PositionLog.screenSummary())")
         pendingSavedScreenRestore = true
         positionRestoreTimer?.invalidate()
         let started = Date()
@@ -147,6 +154,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
                 // Keep the saved position pending. A later display-change
                 // notification, or a manual move, will resolve it.
                 timer.invalidate()
+                PositionLog.write("gave up waiting after 60s; connected=\(PositionLog.screenSummary())")
             }
         }
         if restoreSavedWindowPositionIfPossible() {
@@ -166,13 +174,12 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         positionRestoreTimer = nil
     }
 
-    private func suppressPositionSaves(for duration: TimeInterval = 0.6) {
-        suppressPositionSaveUntil = Date().addingTimeInterval(duration)
+    private func suppressPositionSaves() {
+        ignoreSystemPositionSaves = true
     }
 
     private var isPositionSaveSuppressed: Bool {
-        if let until = suppressPositionSaveUntil, Date() < until { return true }
-        return false
+        ignoreSystemPositionSaves
     }
 
     // A real drag starts with windowWillMove; keeping that signal (plus the
@@ -269,7 +276,8 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     // stack has settled, using the saved screen-relative coordinates.
     private func restoreAfterDisplayChange() {
         guard restoresSavedPosition else { return }
-        if !s.windowScreenName.isEmpty {
+        PositionLog.write("display change; connected=\(PositionLog.screenSummary())")
+        if s.windowScreenID != 0 || !s.windowScreenName.isEmpty {
             beginSavedScreenRestore()
         } else {
             _ = restoreSavedWindowPositionIfPossible()
@@ -283,7 +291,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
 
         // Wait for a saved external display instead of overwriting its
         // position with the screen that macOS temporarily reflowed us onto.
-        guard s.windowScreenName.isEmpty else { return false }
+        guard s.windowScreenID == 0 && s.windowScreenName.isEmpty else { return false }
 
         let savedFrame = NSRect(
             origin: NSPoint(x: s.windowX, y: s.windowY),
@@ -313,8 +321,21 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self, !self.isDVDBouncing else { return }
+                self.ignoreSystemPositionSaves = false
                 self.noteUserMove()
             }
+            .store(in: &cancellables)
+
+        NotificationCenter.default
+            .publisher(for: .switchScreen)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.moveToNextScreen() }
+            .store(in: &cancellables)
+
+        NotificationCenter.default
+            .publisher(for: .userInteraction)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.ignoreSystemPositionSaves = false }
             .store(in: &cancellables)
 
         s.$isClickThrough
@@ -547,12 +568,49 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
 
         if save {
             cancelPendingSavedScreenRestore()
-            suppressPositionSaves(for: 0.4)
+            suppressPositionSaves()
         } else {
             suppressPositionSaves()
         }
         window.setFrameOrigin(origin)
         if save { savePosition(force: true) }
+    }
+
+    // Cycles the clock through the connected displays, keeping the same relative
+    // spot (top-centre stays top-centre). Manual, deterministic escape hatch for
+    // the cases where a wake does not restore the saved display by itself.
+    func moveToNextScreen() {
+        guard let window = window, !s.isFullScreen else { return }
+        let screens = NSScreen.screens.sorted { $0.frame.minX < $1.frame.minX }
+        guard screens.count > 1 else { return }
+
+        let center = CGPoint(x: window.frame.midX, y: window.frame.midY)
+        guard let current = screenContaining(center) ?? window.screen,
+              let index = screens.firstIndex(where: { Self.displayID(of: $0) == Self.displayID(of: current) })
+        else { return }
+        let target = screens[(index + 1) % screens.count]
+
+        let origin = relativeOrigin(of: window, from: current, to: target)
+        cancelPendingSavedScreenRestore()
+        suppressPositionSaves()
+        window.setFrameOrigin(origin)
+        savePosition(force: true)
+        PositionLog.write("manual screen switch -> \(target.localizedName) origin=\(Int(origin.x)),\(Int(origin.y))")
+    }
+
+    private func relativeOrigin(of window: NSWindow, from current: NSScreen, to target: NSScreen) -> NSPoint {
+        let cf = current.visibleFrame
+        let tf = target.visibleFrame
+        let w = window.frame.width
+        let h = window.frame.height
+
+        let spanX = max(1, cf.width - w)
+        let spanY = max(1, cf.height - h)
+        let relX = min(max((window.frame.minX - cf.minX) / spanX, 0), 1)
+        let relY = min(max((window.frame.minY - cf.minY) / spanY, 0), 1)
+
+        return NSPoint(x: tf.minX + relX * max(0, tf.width - w),
+                       y: tf.minY + relY * max(0, tf.height - h))
     }
 
     // MARK: - Burn-in Prevention
@@ -771,6 +829,27 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         return dx * dx + dy * dy
     }
 
+    // MARK: - Screen Identity
+
+    // macOS can rename a display when it reconnects after a wake ("LG ULTRAWIDE"
+    // may come back with a suffix). The hardware ID survives that, so it is the
+    // primary key; the name stays as a fallback for older saved state.
+    static func displayID(of screen: NSScreen) -> Int {
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.intValue ?? 0
+    }
+
+    private func savedScreen() -> NSScreen? {
+        if s.windowScreenID != 0,
+           let byID = NSScreen.screens.first(where: { Self.displayID(of: $0) == s.windowScreenID }) {
+            return byID
+        }
+        if !s.windowScreenName.isEmpty,
+           let byName = NSScreen.screens.first(where: { $0.localizedName == s.windowScreenName }) {
+            return byName
+        }
+        return nil
+    }
+
     // MARK: - Persistence
 
     func savePosition(force: Bool = false) {
@@ -779,7 +858,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         // A display change can temporarily reflow the window onto another
         // screen. Do not persist that transient frame unless the user is
         // actively dragging or explicitly saving a new position.
-        if !force && pendingSavedScreenRestore && NSEvent.pressedMouseButtons == 0 { return }
+        if !force && (pendingSavedScreenRestore || ignoreSystemPositionSaves) { return }
         let origin = window.frame.origin
         s.windowX = origin.x
         s.windowY = origin.y
@@ -788,6 +867,11 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         let center = CGPoint(x: window.frame.midX, y: window.frame.midY)
         if let screen = screenContaining(center) ?? nearestScreen(to: center) {
             let sf = screen.frame
+            let id = Self.displayID(of: screen)
+            if id != s.windowScreenID || screen.localizedName != s.windowScreenName {
+                PositionLog.write("saved screen changed: \(screen.localizedName) id=\(id)")
+            }
+            s.windowScreenID      = id
             s.windowScreenOffsetX = origin.x - sf.origin.x
             s.windowScreenOffsetY = origin.y - sf.origin.y
             s.windowScreenName = screen.localizedName
@@ -810,6 +894,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     func windowDidMove(_ notification: Notification) {
         guard !isDVDBouncing else { return }
         if isUserMovingWindow {
+            ignoreSystemPositionSaves = false
             noteUserMove()
             cancelPendingSavedScreenRestore()
             savePosition(force: true)
@@ -819,6 +904,47 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         savePosition()
     }
 
+}
+
+// Small rolling log for display/position decisions. A wake with a late external
+// display is hard to reproduce, so the next occurrence leaves evidence instead
+// of guesswork. Capped, plain text, no user content.
+enum PositionLog {
+    private static let maxBytes = 48_000
+
+    private static let url: URL = {
+        let logs = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs", isDirectory: true)
+        try? FileManager.default.createDirectory(at: logs, withIntermediateDirectories: true)
+        return logs.appendingPathComponent("FloatingClockOverlay-position.log")
+    }()
+
+    private static let formatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MM-dd HH:mm:ss"
+        return f
+    }()
+
+    static func write(_ message: String) {
+        let line = "\(formatter.string(from: Date()))  \(message)\n"
+        guard let data = line.data(using: .utf8) else { return }
+        let fm = FileManager.default
+        if let size = (try? fm.attributesOfItem(atPath: url.path))?[.size] as? Int, size > maxBytes {
+            try? data.write(to: url)
+        } else if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile()
+            handle.write(data)
+            try? handle.close()
+        } else {
+            try? data.write(to: url)
+        }
+    }
+
+    static func screenSummary() -> String {
+        NSScreen.screens
+            .map { "\($0.localizedName)#\(ClockWindowController.displayID(of: $0)) \(Int($0.frame.minX)),\(Int($0.frame.minY)) \(Int($0.frame.width))x\(Int($0.frame.height))" }
+            .joined(separator: " | ")
+    }
 }
 
 // MARK: - Custom Window (easier dragging)
@@ -837,6 +963,16 @@ class ClockWindow: NSWindow {
     override func mouseDown(with event: NSEvent) {
         let loc = event.locationInWindow
         let pane = paneHitArea(at: loc)
+        NotificationCenter.default.post(name: .userInteraction, object: nil)
+
+        if NSScreen.screens.count > 1, screenSwitchRect.contains(loc) {
+            if event.clickCount == 1 {
+                pendingSingleClick?.cancel()
+                pendingSingleClick = nil
+                NotificationCenter.default.post(name: .switchScreen, object: nil)
+            }
+            return
+        }
 
         if let pane = pane, closeRect(for: pane).contains(loc) {
             if event.clickCount == 1 {
@@ -905,6 +1041,11 @@ class ClockWindow: NSWindow {
                y: pane.frame.maxY - controlInset - controlSize,
                width: controlSize,
                height: controlSize)
+            .insetBy(dx: -controlHitPadding, dy: -controlHitPadding)
+    }
+
+    private var screenSwitchRect: NSRect {
+        NSRect(x: controlInset, y: controlInset, width: controlSize, height: controlSize)
             .insetBy(dx: -controlHitPadding, dy: -controlHitPadding)
     }
 

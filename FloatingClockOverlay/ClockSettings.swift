@@ -93,6 +93,7 @@ final class ClockSettings: ObservableObject {
     @Published var windowScreenOffsetX: Double
     @Published var windowScreenOffsetY: Double
     @Published var windowScreenName:    String
+    @Published var windowScreenID:      Int
     @Published var mirrorToAllDisplays: Bool
 
     private var cancellables = Set<AnyCancellable>()
@@ -182,6 +183,7 @@ final class ClockSettings: ObservableObject {
         windowScreenOffsetX = dbl("windowScreenOffsetX", default: 0)
         windowScreenOffsetY = dbl("windowScreenOffsetY", default: 0)
         windowScreenName    = str("windowScreenName") ?? ""
+        windowScreenID      = Int(dbl("windowScreenID", default: 0))
         mirrorToAllDisplays = bool("mirrorToAllDisplays", default: false)
         clockLanguage       = str("clockLanguage") ?? ""
 
@@ -266,6 +268,7 @@ final class ClockSettings: ObservableObject {
         $windowScreenOffsetX .dropFirst().sink { d.set($0, forKey: "windowScreenOffsetX") }.store(in: &cancellables)
         $windowScreenOffsetY .dropFirst().sink { d.set($0, forKey: "windowScreenOffsetY") }.store(in: &cancellables)
         $windowScreenName    .dropFirst().sink { d.set($0, forKey: "windowScreenName")    }.store(in: &cancellables)
+        $windowScreenID      .dropFirst().sink { d.set(Double($0), forKey: "windowScreenID") }.store(in: &cancellables)
         $mirrorToAllDisplays .dropFirst().sink { d.set($0, forKey: "mirrorToAllDisplays") }.store(in: &cancellables)
         $clockLanguage       .dropFirst().sink { d.set($0, forKey: "clockLanguage")      }.store(in: &cancellables)
 
@@ -436,4 +439,6 @@ extension Notification.Name {
     static let quitApp         = Notification.Name("FloatingClock.quitApp")
     static let openSettings    = Notification.Name("FloatingClock.openSettings")
     static let userDragBegan   = Notification.Name("FloatingClock.userDragBegan")
+    static let switchScreen    = Notification.Name("FloatingClock.switchScreen")
+    static let userInteraction = Notification.Name("FloatingClock.userInteraction")
 }
