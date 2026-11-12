@@ -514,7 +514,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     // narrower and much shorter than the horizontal pane it comes from.
     private func verticalPaneSize(_ pane: NSSize) -> NSSize {
         NSSize(width: (pane.height * 0.8).rounded(),
-               height: (pane.height * 2.15).rounded())
+               height: (pane.height * 2.45).rounded())
     }
 
     private func updatePaneLayout() {
@@ -1170,8 +1170,12 @@ class ClockWindow: NSWindow {
         // the corner. In the vertical strip that button sits outside.
         let s = ClockSettings.shared
         let extra: CGFloat = !s.verticalLayout && s.visiblePaneKinds.last == pane.kind ? 24 : 0
-        let inset = s.verticalLayout ? controlInset + 3 : controlInset
-        return NSRect(x: pane.frame.maxX - inset - controlSize - extra,
+        let inset = controlInset
+        // Vertical: the button shares the centre axis with the label above it.
+        let x = s.verticalLayout
+            ? pane.frame.midX - controlSize / 2
+            : pane.frame.maxX - inset - controlSize - extra
+        return NSRect(x: x,
                y: pane.frame.minY + inset,
                width: controlSize,
                height: controlSize)

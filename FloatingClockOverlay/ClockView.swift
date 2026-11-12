@@ -221,9 +221,8 @@ struct ClockView: View {
 
     private func verticalValueText(_ text: Text, style: ThemeStyle, size: CGFloat,
                                    color: Color, glowOn: Bool) -> some View {
-        // The horizontal glow radii (10/22) are tuned for the full-size digits.
-        // On the smaller stacked digits they merge into one blob, so the
-        // vertical strip gets its own, much tighter halo.
+        // Tighter halo than the horizontal pane: at this type size the
+        // horizontal radii merge into one blob. This is the approved look.
         let inner: CGFloat = style.useNeonGlow ? 5 : 2
         let outer: CGFloat = style.useNeonGlow ? 11 : 5
         return text
@@ -260,21 +259,37 @@ struct ClockView: View {
     private func verticalRows(_ rows: [(value: String, unit: String?)],
                               style: ThemeStyle, size: CGFloat,
                               color: Color, glowOn: Bool) -> some View {
-        let unitSize = max(10, size * 0.38)
+        let unitSize = max(10, size * 0.45)
+        // Every row reserves the same trailing slot, so the digits of all rows
+        // sit on one axis and the unit reads as part of the value ("02 h").
+        let unitSlot = unitSize * 1.1
         return VStack(spacing: 6) {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                // The unit floats next to the digits instead of taking part in
-                // the layout, so every line stays on the same vertical axis.
-                verticalValue(row.value, style: style, size: size,
-                              color: color, glowOn: glowOn)
-                    .overlay(alignment: .trailing) {
-                        if let unit = row.unit {
-                            verticalUnit(unit, style: style, size: unitSize, opacity: 0.6)
-                                .offset(x: unitSize * 0.9)
-                        }
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    verticalValue(row.value, style: style, size: size,
+                                  color: color, glowOn: glowOn)
+                    verticalUnit(row.unit ?? " ", style: style,
+                                 size: unitSize, opacity: row.unit == nil ? 0 : 0.85)
+                        .frame(width: unitSlot, alignment: .leading)
                     }
             }
         }
+    }
+
+    // One grid for every vertical pane: a top band for the close button, the
+    // value in the middle, the small label, and a bottom band for reset/start.
+    // Label and bottom button share the centre axis.
+    private func verticalPaneShell<Content: View>(label: String, style: ThemeStyle,
+                                                  @ViewBuilder content: () -> Content) -> some View {
+        VStack(spacing: 2) {
+            Color.clear.frame(height: 22)
+            content()
+                .frame(maxHeight: .infinity)
+            verticalUnit(label, style: style,
+                         size: max(9, s.fontSize * 0.18), opacity: 0.5)
+            Color.clear.frame(height: 30)
+        }
+        .padding(.horizontal, 5)
     }
 
     private func verticalStandardPaneContent(mode: OverlayMode, style: ThemeStyle) -> some View {
@@ -304,13 +319,11 @@ struct ClockView: View {
             rows = [(String(format: "%02d", seconds / 3600), nil),
                     (String(format: "%02d", (seconds % 3600) / 60), nil),
                     (String(format: "%02d", seconds % 60), nil)]
-            size = s.fontSize * 0.52
+            size = s.fontSize * 0.48
         }
 
-        return VStack(alignment: .leading, spacing: 6) {
-            // Label in the top-left corner; the corner buttons stay free.
-            verticalUnit(mode == .clock ? " " : modeBadge(for: mode), style: style,
-                         size: max(9, s.fontSize * 0.17), opacity: 0.5)
+        return verticalPaneShell(label: mode == .clock ? " " : modeBadge(for: mode),
+                                 style: style) {
             if mode == .clock {
                 VStack(spacing: 0) {
                     verticalValue(rows[0].value, style: style, size: size,
@@ -327,15 +340,10 @@ struct ClockView: View {
                     verticalValue(rows[1].value, style: style, size: size,
                                   color: color, glowOn: glowOn)
                 }
-                .frame(maxWidth: .infinity, alignment: .center)
             } else {
                 verticalRows(rows, style: style, size: size, color: color, glowOn: glowOn)
-                    .frame(maxWidth: .infinity, alignment: .center)
             }
         }
-        .padding(.horizontal, 5)
-        .padding(.top, 6)
-        .padding(.bottom, 8)
     }
 
     private func verticalWorkTimePaneContent(_ style: ThemeStyle) -> some View {
@@ -344,18 +352,13 @@ struct ClockView: View {
         let minutes = roundedMinutes % 60
         let valueColor = s.adaptiveColor ? adaptiveTextColor : style.textColor
 
-        return VStack(alignment: .leading, spacing: 6) {
-            verticalUnit(s.workStartClockString(now: clockTime),
-                         style: style, size: max(9, s.fontSize * 0.18), opacity: 0.55)
+        return verticalPaneShell(label: s.workStartClockString(now: clockTime),
+                                 style: style) {
             verticalRows([(String(format: "%02d", hours), "h"),
                           (String(format: "%02d", minutes), nil)],
                          style: style, size: s.fontSize * 0.62,
                          color: valueColor, glowOn: true)
-                .frame(maxWidth: .infinity, alignment: .center)
         }
-        .padding(.horizontal, 5)
-        .padding(.top, 6)
-        .padding(.bottom, 8)
     }
 
     private func standardPaneContent(mode: OverlayMode, style: ThemeStyle) -> some View {
@@ -486,10 +489,11 @@ struct ClockView: View {
                     HStack {
                         Spacer()
                         bottomControl(pane, style)
+                        if s.verticalLayout { Spacer() }
                     }
                     .padding(.trailing, isLastPane && !s.verticalLayout ? 24 : 0)
                 }
-                .padding(s.verticalLayout ? 11 : 8)
+                .padding(8)
             }
         }
     }
