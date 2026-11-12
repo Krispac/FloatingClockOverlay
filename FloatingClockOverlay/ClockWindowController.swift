@@ -1181,25 +1181,31 @@ class ClockWindow: NSWindow {
         let s = ClockSettings.shared
         let extra: CGFloat = !s.verticalLayout && s.visiblePaneKinds.last == pane.kind ? 24 : 0
         let inset = controlInset
+        // The clock pane pairs its switch with a settings button; the narrow
+        // strip uses slightly smaller circles for the pair.
+        let pairSize = s.verticalLayout ? 14.0 : controlSize
+        let pairGap: CGFloat = s.verticalLayout ? 4 : 6
         // The clock pane shows a settings button beside the layout switch, so
         // the pair is centred as a whole instead of the switch alone.
         let pairShift: CGFloat = s.verticalLayout && pane.kind == .clock
-            ? (controlSize + 6) / 2
+            ? (pairSize + pairGap) / 2
             : 0
         // Vertical: the button shares the centre axis with the label above it.
         let x = s.verticalLayout
-            ? pane.frame.midX + pairShift - controlSize / 2
-            : pane.frame.maxX - inset - controlSize - extra
+            ? pane.frame.midX + pairShift - pairSize / 2
+            : pane.frame.maxX - inset - pairSize - extra
         return NSRect(x: x,
                y: pane.frame.minY + inset,
-               width: controlSize,
-               height: controlSize)
+               width: pairSize,
+               height: pairSize)
             .insetBy(dx: -controlHitPadding, dy: -controlHitPadding)
     }
 
     private func settingsRect(for pane: PaneHitArea) -> NSRect {
+        let vertical = ClockSettings.shared.verticalLayout
+        let size: CGFloat = vertical ? 14 : controlSize
         var rect = resetRect(for: pane)
-        rect.origin.x -= controlSize + 6
+        rect.origin.x -= size + (vertical ? 4 : 6)
         return rect
     }
 

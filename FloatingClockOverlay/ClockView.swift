@@ -506,7 +506,10 @@ struct ClockView: View {
                     }
                     .padding(.trailing, isLastPane && !s.verticalLayout ? 24 : 0)
                 }
-                .padding(8)
+                // The narrow strip has no room to spare for two buttons, so
+                // only the bottom row tightens up.
+                .padding(.horizontal, s.verticalLayout ? 4 : 8)
+                .padding(.vertical, 8)
             }
         }
     }
@@ -524,7 +527,7 @@ struct ClockView: View {
     @ViewBuilder
     private func bottomControl(_ pane: Pane, _ style: ThemeStyle) -> some View {
         if pane.kind == .clock {
-            HStack(spacing: 6) {
+            HStack(spacing: s.verticalLayout ? 4 : 6) {
                 settingsControl(style)
                 layoutControl(style)
             }
@@ -540,9 +543,10 @@ struct ClockView: View {
     // Settings stay reachable even when the system hides the menu bar icon.
     private func settingsControl(_ style: ThemeStyle) -> some View {
         Image(systemName: "gearshape")
-            .font(.system(size: 8, weight: .semibold))
+            .font(.system(size: s.verticalLayout ? 7 : 8, weight: .semibold))
             .foregroundStyle(style.textColor.opacity(0.68))
-            .frame(width: 16, height: 16)
+            .frame(width: s.verticalLayout ? 14 : 16,
+                   height: s.verticalLayout ? 14 : 16)
             .background(Circle().fill(Color.white.opacity(0.07)))
             .overlay(Circle().strokeBorder(style.textColor.opacity(0.16), lineWidth: 0.5))
             .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
@@ -565,9 +569,10 @@ struct ClockView: View {
     // digging through the menu bar.
     private func layoutControl(_ style: ThemeStyle) -> some View {
         Image(systemName: s.verticalLayout ? "rectangle" : "rectangle.portrait")
-            .font(.system(size: 8, weight: .semibold))
+            .font(.system(size: s.verticalLayout ? 7 : 8, weight: .semibold))
             .foregroundStyle(style.textColor.opacity(0.68))
-            .frame(width: 16, height: 16)
+            .frame(width: s.verticalLayout ? 14 : 16,
+                   height: s.verticalLayout ? 14 : 16)
             .background(Circle().fill(Color.white.opacity(0.07)))
             .overlay(Circle().strokeBorder(style.textColor.opacity(0.16), lineWidth: 0.5))
             .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
