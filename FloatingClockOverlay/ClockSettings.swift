@@ -96,6 +96,8 @@ final class ClockSettings: ObservableObject {
     @Published var windowScreenName:    String
     @Published var windowScreenID:      Int
     @Published var mirrorToAllDisplays: Bool
+    // Panes stacked in a column instead of a row (for a portrait display).
+    @Published var verticalLayout:      Bool
 
     private var cancellables = Set<AnyCancellable>()
     private var dayChangeObserver: NSObjectProtocol?
@@ -187,6 +189,7 @@ final class ClockSettings: ObservableObject {
         windowScreenName    = str("windowScreenName") ?? ""
         windowScreenID      = Int(dbl("windowScreenID", default: 0))
         mirrorToAllDisplays = bool("mirrorToAllDisplays", default: false)
+        verticalLayout      = bool("verticalLayout",      default: false)
         clockLanguage       = str("clockLanguage") ?? ""
 
         setupPersistence()
@@ -273,6 +276,7 @@ final class ClockSettings: ObservableObject {
         $windowScreenName    .dropFirst().sink { d.set($0, forKey: "windowScreenName")    }.store(in: &cancellables)
         $windowScreenID      .dropFirst().sink { d.set(Double($0), forKey: "windowScreenID") }.store(in: &cancellables)
         $mirrorToAllDisplays .dropFirst().sink { d.set($0, forKey: "mirrorToAllDisplays") }.store(in: &cancellables)
+        $verticalLayout      .dropFirst().sink { d.set($0, forKey: "verticalLayout")      }.store(in: &cancellables)
         $clockLanguage       .dropFirst().sink { d.set($0, forKey: "clockLanguage")      }.store(in: &cancellables)
 
         dayChangeObserver = NotificationCenter.default.addObserver(
@@ -399,10 +403,11 @@ final class ClockSettings: ObservableObject {
 
     // The pane intentionally has no seconds. Rounding up to the next quarter
     // keeps the display honest: 1 minute already reads as 15 minutes.
-    func workElapsedRoundedUpMinutes(now: Date = Date()) -> Int {
+    // Rounds DOWN to full 15 minutes: showing 15 minutes after two minutes of
+    // work made the day look further along than it was.
+    func workElapsedRoundedMinutes(now: Date = Date()) -> Int {
         let seconds = max(0, now.timeIntervalSince(workStartDate(now: now)))
-        let minutes = Int(ceil(seconds / 60.0))
-        return Int(ceil(Double(minutes) / 15.0)) * 15
+        return Int(floor(seconds / 900.0)) * 15
     }
 
     func workStartClockString(now: Date = Date()) -> String {

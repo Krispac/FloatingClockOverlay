@@ -24,6 +24,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     private var dvdLastTimestamp: TimeInterval = 0
     private var lastVisiblePanes: [OverlayPaneKind] = []
     private var isUpdatingPaneLayout = false
+    private var isUserResizing = false
     private var isApplyingProgrammaticFrame = false
     private var clickThroughPanel: ClickThroughPanel?
     private let restoresSavedPosition: Bool
@@ -385,7 +386,8 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
             s.$showPrimaryPane.map   { _ in () }.eraseToAnyPublisher(),
             s.$showClockCompanion.map { _ in () }.eraseToAnyPublisher(),
             s.$showWorkTimePane.map   { _ in () }.eraseToAnyPublisher(),
-            s.$overlayMode.map       { _ in () }.eraseToAnyPublisher()
+            s.$overlayMode.map       { _ in () }.eraseToAnyPublisher(),
+            s.$verticalLayout.map    { _ in () }.eraseToAnyPublisher()
         )
         .receive(on: DispatchQueue.main)
         .sink { [weak self] in self?.updatePaneLayout() }
@@ -470,7 +472,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         }
 
         let count = max(1, s.visiblePaneCount)
-        let size = NSSize(width: paneSize.width * CGFloat(count), height: paneSize.height)
+        let size = layoutSize(paneSize, count: count)
         isApplyingProgrammaticFrame = true
         window.setContentSize(size)
         isApplyingProgrammaticFrame = false
@@ -499,6 +501,22 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         return NSSize(width: s.customWidth, height: s.customHeight)
     }
 
+    private func layoutSize(_ pane: NSSize, count: Int) -> NSSize {
+        let n = CGFloat(max(1, count))
+        if s.verticalLayout {
+            let vp = verticalPaneSize(pane)
+            return NSSize(width: vp.width, height: vp.height * n)
+        }
+        return NSSize(width: pane.width * n, height: pane.height)
+    }
+
+    // A vertical pane only has to hold two or three stacked numbers, so it is
+    // narrower and much shorter than the horizontal pane it comes from.
+    private func verticalPaneSize(_ pane: NSSize) -> NSSize {
+        NSSize(width: (pane.height * 0.8).rounded(),
+               height: (pane.height * 2.0).rounded())
+    }
+
     private func updatePaneLayout() {
         guard let window = window, !s.isFullScreen else { return }
 
@@ -512,27 +530,44 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         }
 
         let pane = paneSize
-        let newWidth = pane.width * CGFloat(count)
+        let newSize = layoutSize(pane, count: count)
         let oldFrame = window.frame
         var origin = oldFrame.origin
+        let wasVertical = oldFrame.height > oldFrame.width
 
         // Keep a surviving pane at its exact screen position when panes are
         // added or removed. The first shared pane is the reference; if a new
         // pane appears on the left, that shifts the window left instead.
-        if !lastVisiblePanes.isEmpty {
+        if wasVertical != s.verticalLayout {
+            // Orientation switch: keep the bar's horizontal centre and grow
+            // downwards from its top edge.
+            origin.x = oldFrame.midX - newSize.width / 2
+            origin.y = oldFrame.maxY - newSize.height
+        } else if !lastVisiblePanes.isEmpty {
             let shared = newPanes.first { lastVisiblePanes.contains($0) }
                 ?? lastVisiblePanes.first { newPanes.contains($0) }
             if let shared,
                let oldIndex = lastVisiblePanes.firstIndex(of: shared),
                let newIndex = newPanes.firstIndex(of: shared) {
-                let oldPaneWidth = oldFrame.width / CGFloat(max(1, lastVisiblePanes.count))
-                let sharedX = oldFrame.origin.x + CGFloat(oldIndex) * oldPaneWidth
-                origin.x = sharedX - CGFloat(newIndex) * pane.width
+                if s.verticalLayout {
+                    let vp = verticalPaneSize(pane)
+                    let oldPaneHeight = oldFrame.height / CGFloat(max(1, lastVisiblePanes.count))
+                    let sharedTop = oldFrame.maxY - CGFloat(oldIndex) * oldPaneHeight
+                    origin.y = sharedTop - CGFloat(newIndex + 1) * vp.height
+                } else {
+                    let oldPaneWidth = oldFrame.width / CGFloat(max(1, lastVisiblePanes.count))
+                    let sharedX = oldFrame.origin.x + CGFloat(oldIndex) * oldPaneWidth
+                    origin.x = sharedX - CGFloat(newIndex) * pane.width
+                }
             }
         }
 
         isUpdatingPaneLayout = true
-        window.setFrame(NSRect(origin: origin, size: NSSize(width: newWidth, height: pane.height)),
+        // The vertical strip is narrower than the horizontal minimum.
+        window.minSize = s.verticalLayout
+            ? NSSize(width: 56, height: 120)
+            : NSSize(width: 80, height: 30)
+        window.setFrame(NSRect(origin: origin, size: newSize),
                         display: true)
         isUpdatingPaneLayout = false
 
@@ -682,8 +717,12 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
             return
         }
         let size = panel.frame.size
-        panel.setFrameOrigin(NSPoint(x: window.frame.maxX - size.width,
-                                     y: window.frame.minY))
+        // In the narrow vertical strip the button would cover the digits, so it
+        // sits just below the strip instead of in its corner.
+        let origin = s.verticalLayout
+            ? NSPoint(x: window.frame.maxX - size.width, y: window.frame.minY - size.height)
+            : NSPoint(x: window.frame.maxX - size.width, y: window.frame.minY)
+        panel.setFrameOrigin(origin)
         panel.orderFrontRegardless()
     }
 
@@ -921,14 +960,37 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     // MARK: - NSWindowDelegate
 
     func windowDidResize(_ notification: Notification) {
-        guard !s.isFullScreen, !isUpdatingPaneLayout, !isApplyingProgrammaticFrame else { return }
         updateClickThroughPanel()
-        if let window = window {
-            let paneCount = CGFloat(max(1, s.visiblePaneCount))
+        // Only a real drag of the window edge may change the saved pane size.
+        // Programmatic layout changes (pane toggles, vertical switch, wake
+        // reflow) must never leak their intermediate frames into the settings.
+        guard isUserResizing, !s.isFullScreen,
+              !isUpdatingPaneLayout, !isApplyingProgrammaticFrame else { return }
+        persistPaneSize()
+    }
+
+    func windowWillStartLiveResize(_ notification: Notification) {
+        isUserResizing = true
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        isUserResizing = false
+        guard !s.isFullScreen else { return }
+        persistPaneSize()
+    }
+
+    private func persistPaneSize() {
+        guard let window = window else { return }
+        let paneCount = CGFloat(max(1, s.visiblePaneCount))
+        if s.verticalLayout {
+            // Vertical swaps the role of the two pane dimensions.
+            s.customWidth  = Double(window.frame.height / paneCount)
+            s.customHeight = Double(window.frame.width / 0.8)
+        } else {
             s.customWidth  = Double(window.frame.width / paneCount)
             s.customHeight = Double(window.frame.height)
-            if s.sizePreset != .custom { s.sizePreset = .custom }
         }
+        if s.sizePreset != .custom { s.sizePreset = .custom }
     }
 
     func windowDidMove(_ notification: Notification) {
@@ -1063,7 +1125,20 @@ class ClockWindow: NSWindow {
         let panes = settings.visiblePaneKinds
         guard !panes.isEmpty else { return [] }
 
-        let width = frame.width / CGFloat(panes.count)
+        let count = CGFloat(panes.count)
+        if settings.verticalLayout {
+            let height = frame.height / count
+            return panes.enumerated().map { index, pane in
+                // First pane on top, matching the SwiftUI column order.
+                PaneHitArea(
+                    frame: NSRect(x: 0, y: frame.height - CGFloat(index + 1) * height,
+                                  width: frame.width, height: height),
+                    kind: pane
+                )
+            }
+        }
+
+        let width = frame.width / count
         return panes.enumerated().map { index, pane in
             PaneHitArea(
                 frame: NSRect(x: CGFloat(index) * width, y: 0,
@@ -1091,7 +1166,16 @@ class ClockWindow: NSWindow {
     }
 
     private func resetRect(for pane: PaneHitArea) -> NSRect {
-        NSRect(x: pane.frame.maxX - controlInset - controlSize,
+        // The last horizontal pane leaves room for the click-through button in
+        // the corner. In the vertical strip that button sits outside.
+        let s = ClockSettings.shared
+        let extra: CGFloat = !s.verticalLayout && s.visiblePaneKinds.last == pane.kind ? 24 : 0
+        // Vertical panes put the reset/start button bottom-left, away from the
+        // centred digits.
+        let x = s.verticalLayout
+            ? pane.frame.minX + controlInset
+            : pane.frame.maxX - controlInset - controlSize - extra
+        return NSRect(x: x,
                y: pane.frame.minY + controlInset,
                width: controlSize,
                height: controlSize)

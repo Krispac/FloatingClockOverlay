@@ -28,7 +28,8 @@ A polished, transparent always-on-top clock overlay for macOS — built with Swi
 - Click-to-start break after the timer, with pause/resume and a 5-minute default
 - Silent macOS notification when the countdown timer finishes
 - **Three joined panes:** work time, primary timer/stopwatch, and side clock
-- **Work-time pane:** `6:45 h` since the persisted first app launch or full screen wake of the day, with a one-click **Start now** override for the current day, rounded up to 15 minutes
+- **Work-time pane:** `6:45 h` since the persisted first app launch or full screen wake of the day, with a one-click **Start now** override for the current day, rounded down to full 15 minutes
+- **Vertical layout:** the joined panes become a narrow strip (narrower than the horizontal bar is high), with every value stacked — hours over minutes, and hours/minutes/seconds for the timer — keeping the `h` and labels the horizontal pane already shows
 - **Snap to Top Center:** one click moves the joined panes to the top edge, horizontally centered on the current display
 - **Adaptive Color** — auto-adjusts text color based on background brightness
 - **Burn-in Prevention** — slowly drifts the clock to protect your display
@@ -37,7 +38,7 @@ A polished, transparent always-on-top clock overlay for macOS — built with Swi
 - **Double-click to open Settings** — no need to find the menu bar icon
 - **Position memory** — remembers its location after restart and restores it after sleep or display changes
 - **Settings window** — every option live-updates the overlay
-- **Menu bar icon** with full quick-access controls (Theme / Size / Mode submenus)
+- **Menu bar icon** with a short day-to-day menu: show/hide, click-through, standard and vertical layout, mode, settings and quit
 - Global keyboard shortcut **⌘ ⌥ C** to toggle click-through
 - All settings saved to `UserDefaults` and restored on relaunch
 - Menu bar app — keeps running even when the settings window is closed

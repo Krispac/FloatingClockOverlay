@@ -20,16 +20,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var clockModeItem:     NSMenuItem?
     private var timerModeItem:     NSMenuItem?
     private var stopwatchModeItem: NSMenuItem?
-    private var timerStartItem:    NSMenuItem?
-    private var timerResetItem:    NSMenuItem?
-    private var swStartItem:       NSMenuItem?
-    private var swLapItem:         NSMenuItem?
-    private var swResetItem:       NSMenuItem?
-    private var themeMenuItem:     NSMenuItem?
-    private var sizeMenuItem:      NSMenuItem?
-    private var workTimePaneItem:  NSMenuItem?
-    private var primaryPaneItem:   NSMenuItem?
-    private var clockPaneItem:     NSMenuItem?
+    private var verticalLayoutItem: NSMenuItem?
 
     // MARK: - Lifecycle
 
@@ -120,69 +111,43 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
 
-        // ── Primary actions ───────────────────────────────────────────────
-        menu.addItem(NSMenuItem(title: NSLocalizedString("Open Settings", comment: ""),
-                                action: #selector(openSettings), keyEquivalent: ","))
-        menu.addItem(.separator())
-
+        // Keep this short: only the actions used day to day. Everything else
+        // lives in Settings.
         let show = NSMenuItem(title: NSLocalizedString("Show Overlay", comment: ""),
-                              action: #selector(toggleVisibility), keyEquivalent: "")
+                              action: #selector(toggleVisibility), keyEquivalent: "h")
+        show.keyEquivalentModifierMask = [.command, .shift]
         let ct   = NSMenuItem(title: NSLocalizedString("Click-Through: ON ✓", comment: ""),
                               action: #selector(toggleClickThrough), keyEquivalent: "")
+        ct.keyEquivalentModifierMask = [.command, .option]
+        ct.keyEquivalent = "c"
         showHideItem = show; clickThroughItem = ct
         menu.addItem(show)
         menu.addItem(ct)
         menu.addItem(.separator())
 
-        // ── Launch at Login ───────────────────────────────────────────────
-        let loginItem = NSMenuItem(title: NSLocalizedString("Launch at Login", comment: ""),
-                                   action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        launchAtLoginItem = loginItem
-        menu.addItem(loginItem)
-        menu.addItem(.separator())
+        let standard = NSMenuItem(title: NSLocalizedString("Standard Layout", comment: ""),
+                                  action: #selector(restoreStandardLayout), keyEquivalent: "")
+        standard.target = self
+        menu.addItem(standard)
 
-        // ── Theme submenu ─────────────────────────────────────────────────
-        let themeItem = NSMenuItem(title: NSLocalizedString("Theme", comment: ""), action: nil, keyEquivalent: "")
-        themeItem.submenu = buildThemeMenu()
-        themeMenuItem = themeItem
-        menu.addItem(themeItem)
+        let vertical = NSMenuItem(title: NSLocalizedString("Vertical Layout", comment: ""),
+                                  action: #selector(toggleVerticalLayout), keyEquivalent: "")
+        vertical.target = self
+        verticalLayoutItem = vertical
+        menu.addItem(vertical)
 
-        // ── Size submenu ──────────────────────────────────────────────────
-        let sizeItem = NSMenuItem(title: NSLocalizedString("Size", comment: ""), action: nil, keyEquivalent: "")
-        sizeItem.submenu = buildSizeMenu()
-        sizeMenuItem = sizeItem
-        menu.addItem(sizeItem)
-
-        // ── Panels submenu ────────────────────────────────────────────────
-        let panelsItem = NSMenuItem(title: NSLocalizedString("Panels", comment: ""), action: nil, keyEquivalent: "")
-        panelsItem.submenu = buildPanelsMenu()
-        menu.addItem(panelsItem)
-
-        // ── Mode submenu ──────────────────────────────────────────────────
         let modeItem = NSMenuItem(title: NSLocalizedString("Mode", comment: ""), action: nil, keyEquivalent: "")
         modeItem.submenu = buildModeMenu()
         menu.addItem(modeItem)
         menu.addItem(.separator())
 
-        // ── Timer quick controls ──────────────────────────────────────────
-        let tStart = NSMenuItem(title: NSLocalizedString("Timer: Start", comment: ""), action: #selector(timerStartPause), keyEquivalent: "")
-        let tReset = NSMenuItem(title: NSLocalizedString("Timer: Reset", comment: ""), action: #selector(timerReset),      keyEquivalent: "")
-        timerStartItem = tStart; timerResetItem = tReset
-        menu.addItem(tStart); menu.addItem(tReset)
-        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: NSLocalizedString("Open Settings", comment: ""),
+                                action: #selector(openSettings), keyEquivalent: ","))
 
-        // ── Stopwatch quick controls ──────────────────────────────────────
-        let swStart = NSMenuItem(title: NSLocalizedString("Stopwatch: Start", comment: ""), action: #selector(swStartPause), keyEquivalent: "")
-        let swLap   = NSMenuItem(title: NSLocalizedString("Stopwatch: Lap", comment: ""),   action: #selector(swLap),        keyEquivalent: "")
-        let swReset = NSMenuItem(title: NSLocalizedString("Stopwatch: Reset", comment: ""), action: #selector(swReset),      keyEquivalent: "")
-        swStartItem = swStart; swLapItem = swLap; swResetItem = swReset
-        menu.addItem(swStart); menu.addItem(swLap); menu.addItem(swReset)
-        menu.addItem(.separator())
-
-        menu.addItem(NSMenuItem(title: NSLocalizedString("Snap to Top Center", comment: ""),
-                                action: #selector(snapToTopCenter), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: NSLocalizedString("Reset Position", comment: ""),
-                                action: #selector(resetPosition), keyEquivalent: ""))
+        let loginItem = NSMenuItem(title: NSLocalizedString("Launch at Login", comment: ""),
+                                   action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        launchAtLoginItem = loginItem
+        menu.addItem(loginItem)
         menu.addItem(.separator())
 
         // ── The ONLY real quit path ───────────────────────────────────────
@@ -193,53 +158,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     // MARK: - Submenus
-
-    private func buildThemeMenu() -> NSMenu {
-        let m = NSMenu()
-        for theme in ClockTheme.allCases {
-            let item = NSMenuItem(title: theme.label, action: #selector(setTheme(_:)), keyEquivalent: "")
-            item.representedObject = theme.rawValue
-            item.target = self
-            m.addItem(item)
-        }
-        return m
-    }
-
-    private func buildSizeMenu() -> NSMenu {
-        let m = NSMenu()
-        for preset in SizePreset.allCases {
-            let item = NSMenuItem(title: preset.label, action: #selector(setSize(_:)), keyEquivalent: "")
-            item.representedObject = preset.rawValue
-            item.target = self
-            m.addItem(item)
-        }
-        return m
-    }
-
-    private func buildPanelsMenu() -> NSMenu {
-        let m = NSMenu()
-        let workTime = NSMenuItem(title: NSLocalizedString("Work Time Pane", comment: ""),
-                                  action: #selector(toggleWorkTimePane), keyEquivalent: "")
-        let primary = NSMenuItem(title: NSLocalizedString("Timer Pane", comment: ""),
-                                 action: #selector(togglePrimaryPane), keyEquivalent: "")
-        let clock = NSMenuItem(title: NSLocalizedString("Side Clock Pane", comment: ""),
-                               action: #selector(toggleClockPane), keyEquivalent: "")
-        workTime.target = self
-        primary.target = self
-        clock.target = self
-        workTimePaneItem = workTime
-        primaryPaneItem = primary
-        clockPaneItem = clock
-        m.addItem(workTime)
-        m.addItem(primary)
-        m.addItem(clock)
-        m.addItem(.separator())
-        let startNow = NSMenuItem(title: NSLocalizedString("Work Time: Start Now", comment: ""),
-                                  action: #selector(workTimeStartNow), keyEquivalent: "")
-        startNow.target = self
-        m.addItem(startNow)
-        return m
-    }
 
     private func buildModeMenu() -> NSMenu {
         let m = NSMenu()
@@ -265,46 +183,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         clockModeItem?.state     = s.overlayMode == .clock     ? .on : .off
         timerModeItem?.state     = s.overlayMode == .timer     ? .on : .off
         stopwatchModeItem?.state = s.overlayMode == .stopwatch ? .on : .off
-
-        primaryPaneItem?.title   = primaryPaneLabel(for: s.overlayMode)
-        workTimePaneItem?.state  = s.showWorkTimePane ? .on : .off
-        primaryPaneItem?.state   = s.showPrimaryPane ? .on : .off
-        clockPaneItem?.state     = s.isClockCompanionVisible ? .on : .off
-        clockPaneItem?.isEnabled = s.overlayMode != .clock
-
-        let inTimer = s.overlayMode == .timer
-        timerStartItem?.isEnabled = inTimer
-        timerResetItem?.isEnabled = inTimer
-        switch tc.timerState {
-        case .idle:     timerStartItem?.title = NSLocalizedString("Timer: Start", comment: "")
-        case .running:  timerStartItem?.title = NSLocalizedString("Timer: Pause", comment: "")
-        case .paused:   timerStartItem?.title = NSLocalizedString("Timer: Resume", comment: "")
-        case .finished: timerStartItem?.title = NSLocalizedString("Timer: Start Break", comment: "")
-        case .breakRunning: timerStartItem?.title = NSLocalizedString("Break: Pause", comment: "")
-        case .breakPaused:  timerStartItem?.title = NSLocalizedString("Break: Resume", comment: "")
-        }
-
-        let inSW = s.overlayMode == .stopwatch
-        swStartItem?.isEnabled = inSW
-        swLapItem?.isEnabled   = inSW && tc.stopwatchState == .running
-        swResetItem?.isEnabled = inSW
-        switch tc.stopwatchState {
-        case .idle:    swStartItem?.title = NSLocalizedString("Stopwatch: Start", comment: "")
-        case .running: swStartItem?.title = NSLocalizedString("Stopwatch: Pause", comment: "")
-        case .paused:  swStartItem?.title = NSLocalizedString("Stopwatch: Resume", comment: "")
-        }
-
-        // Checkmarks for theme and size submenus
-        if let sub = themeMenuItem?.submenu {
-            for i in sub.items {
-                i.state = (i.representedObject as? String) == s.selectedTheme.rawValue ? .on : .off
-            }
-        }
-        if let sub = sizeMenuItem?.submenu {
-            for i in sub.items {
-                i.state = (i.representedObject as? String) == s.sizePreset.rawValue ? .on : .off
-            }
-        }
+        verticalLayoutItem?.state = s.verticalLayout ? .on : .off
     }
 
     // MARK: - Menu Actions
@@ -319,22 +198,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleVisibility() {
         let s = ClockSettings.shared
         if s.visiblePaneCount == 0 {
-            s.showPrimaryPane = true
-            s.isVisible = true
+            // Nothing to show: bring the standard three panes back instead of
+            // a single lonely pane.
+            restoreStandardLayout()
         } else {
             s.isVisible.toggle()
         }
     }
     @objc private func toggleClickThrough()  { ClockSettings.shared.isClickThrough.toggle() }
-    @objc private func resetPosition() {
-        NotificationCenter.default.post(name: .moveToPreset, object: ClockSettings.PositionPreset.reset)
+
+    // Returns to the three-pane horizontal layout the user actually uses.
+    @objc private func restoreStandardLayout() {
+        let s = ClockSettings.shared
+        // In clock mode the side clock pane is suppressed, which would leave
+        // only two panes. The standard layout means work | timer | clock.
+        if s.overlayMode == .clock { s.overlayMode = .timer }
+        s.verticalLayout      = false
+        s.showWorkTimePane    = true
+        s.showPrimaryPane     = true
+        s.showClockCompanion  = true
+        s.isVisible           = true
     }
 
-    @objc private func snapToTopCenter() {
-        NotificationCenter.default.post(name: .moveToPreset, object: ClockSettings.PositionPreset.topCenter)
-    }
-    @objc private func workTimeStartNow() {
-        ClockSettings.shared.startWorkTimeNow()
+    @objc private func toggleVerticalLayout() {
+        ClockSettings.shared.verticalLayout.toggle()
     }
     @objc private func toggleLaunchAtLogin() {
         let s = ClockSettings.shared
@@ -342,16 +229,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         s.applyLaunchAtLogin(s.launchAtLogin)
     }
 
-    @objc private func setTheme(_ sender: NSMenuItem) {
-        if let raw = sender.representedObject as? String, let t = ClockTheme(rawValue: raw) {
-            ClockSettings.shared.selectedTheme = t
-        }
-    }
-    @objc private func setSize(_ sender: NSMenuItem) {
-        if let raw = sender.representedObject as? String, let p = SizePreset(rawValue: raw) {
-            ClockSettings.shared.sizePreset = p
-        }
-    }
     @objc private func setModeClock()     { selectMode(.clock) }
     @objc private func setModeTimer()     { selectMode(.timer) }
     @objc private func setModeStopwatch() { selectMode(.stopwatch) }
@@ -362,53 +239,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         s.showPrimaryPane = true
         s.isVisible = true
     }
-
-    private func primaryPaneLabel(for mode: OverlayMode) -> String {
-        switch mode {
-        case .clock:     return NSLocalizedString("Clock Pane", comment: "")
-        case .timer:     return NSLocalizedString("Timer Pane", comment: "")
-        case .stopwatch: return NSLocalizedString("Stopwatch Pane", comment: "")
-        }
-    }
-
-    @objc private func togglePrimaryPane() {
-        let s = ClockSettings.shared
-        s.showPrimaryPane.toggle()
-        if s.showPrimaryPane { s.isVisible = true }
-    }
-
-    @objc private func toggleWorkTimePane() {
-        let s = ClockSettings.shared
-        s.showWorkTimePane.toggle()
-        if s.showWorkTimePane { s.isVisible = true }
-    }
-
-    @objc private func toggleClockPane() {
-        let s = ClockSettings.shared
-        guard s.overlayMode != .clock else { return }
-        s.showClockCompanion.toggle()
-        if s.showClockCompanion { s.isVisible = true }
-    }
-
-    @objc private func timerStartPause() {
-        switch TimeController.shared.timerState {
-        case .idle, .paused:  TimeController.shared.timerStart()
-        case .running:        TimeController.shared.timerPause()
-        case .finished:       TimeController.shared.breakStart()
-        case .breakRunning:   TimeController.shared.breakPause()
-        case .breakPaused:    TimeController.shared.breakResume()
-        }
-    }
-    @objc private func timerReset() { TimeController.shared.timerReset() }
-
-    @objc private func swStartPause() {
-        switch TimeController.shared.stopwatchState {
-        case .idle, .paused: TimeController.shared.stopwatchStart()
-        case .running:       TimeController.shared.stopwatchPause()
-        }
-    }
-    @objc private func swLap()   { TimeController.shared.stopwatchLap() }
-    @objc private func swReset() { TimeController.shared.stopwatchReset() }
 
     // MARK: - Mirror to All Displays
 

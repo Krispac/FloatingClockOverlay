@@ -80,34 +80,63 @@ struct ClockView: View {
         return ZStack {
             backgroundLayer(style, paneCount: max(1, panes.count))
 
-            HStack(spacing: 0) {
-                ForEach(panes) { pane in
-                    paneContent(pane, style)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if s.verticalLayout {
+                VStack(spacing: 0) {
+                    ForEach(panes) { pane in
+                        paneContent(pane, style)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+            } else {
+                HStack(spacing: 0) {
+                    ForEach(panes) { pane in
+                        paneContent(pane, style)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 }
             }
 
             if panes.count > 1 {
                 GeometryReader { geo in
                     ForEach(1..<panes.count, id: \.self) { index in
-                        Rectangle()
-                            .fill(style.textColor.opacity(0.10))
-                            .frame(width: 1, height: max(0, geo.size.height - 20))
-                            .position(
-                                x: geo.size.width * CGFloat(index) / CGFloat(panes.count),
-                                y: geo.size.height / 2
-                            )
+                        if s.verticalLayout {
+                            Rectangle()
+                                .fill(style.textColor.opacity(0.10))
+                                .frame(width: max(0, geo.size.width - 20), height: 1)
+                                .position(
+                                    x: geo.size.width / 2,
+                                    y: geo.size.height * CGFloat(index) / CGFloat(panes.count)
+                                )
+                        } else {
+                            Rectangle()
+                                .fill(style.textColor.opacity(0.10))
+                                .frame(width: 1, height: max(0, geo.size.height - 20))
+                                .position(
+                                    x: geo.size.width * CGFloat(index) / CGFloat(panes.count),
+                                    y: geo.size.height / 2
+                                )
+                        }
                     }
                 }
             }
 
-            HStack(spacing: 0) {
-                ForEach(panes) { pane in
-                    paneControls(pane, style)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if s.verticalLayout {
+                VStack(spacing: 0) {
+                    ForEach(panes) { pane in
+                        paneControls(pane, style, isLastPane: pane.id == panes.last?.id)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 }
+                .allowsHitTesting(false)
+            } else {
+                HStack(spacing: 0) {
+                    ForEach(panes) { pane in
+                        paneControls(pane, style, isLastPane: pane.id == panes.last?.id)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+                .allowsHitTesting(false)
             }
-            .allowsHitTesting(false)
 
             if NSScreen.screens.count > 1 {
                 VStack {
@@ -162,12 +191,140 @@ struct ClockView: View {
 
     @ViewBuilder
     private func paneContent(_ pane: Pane, _ style: ThemeStyle) -> some View {
-        switch pane.kind {
-        case .workTime:
-            workTimePaneContent(style)
-        case .primary, .clock:
-            standardPaneContent(mode: pane.mode ?? .clock, style: style)
+        if s.verticalLayout {
+            switch pane.kind {
+            case .workTime:
+                verticalWorkTimePaneContent(style)
+            case .primary, .clock:
+                verticalStandardPaneContent(mode: pane.mode ?? .clock, style: style)
+            }
+        } else {
+            switch pane.kind {
+            case .workTime:
+                workTimePaneContent(style)
+            case .primary, .clock:
+                standardPaneContent(mode: pane.mode ?? .clock, style: style)
+            }
         }
+    }
+
+    // MARK: - Vertical panes (narrow strip, values stacked in two lines)
+
+    private func verticalValue(_ text: String, style: ThemeStyle, size: CGFloat,
+                               color: Color, glowOn: Bool) -> some View {
+        // The horizontal glow radii (10/22) are tuned for the full-size digits.
+        // On the smaller stacked digits they merge into one blob, so the
+        // vertical strip gets its own, much tighter halo.
+        let inner: CGFloat = style.useNeonGlow ? 5 : 2
+        let outer: CGFloat = style.useNeonGlow ? 11 : 5
+        return Text(text)
+            .font(.system(size: size, weight: timeWeight, design: timeDesign)
+                    .monospacedDigit())
+            .tracking(timeTracking)
+            .foregroundColor(color)
+            .lineLimit(1)
+            .minimumScaleFactor(0.4)
+            .shadow(
+                color: glowOrShadow(style, opacity: glowOn ? 0.9 : 0.4),
+                radius: inner,
+                x: 0, y: style.useNeonGlow ? 0 : 1
+            )
+            .shadow(
+                color: glowOrShadow(style, opacity: glowOn ? 0.5 : 0.2),
+                radius: outer,
+                x: 0, y: style.useNeonGlow ? 0 : 4
+            )
+    }
+
+    private func verticalUnit(_ text: String, style: ThemeStyle,
+                              size: CGFloat, opacity: Double) -> some View {
+        Text(text)
+            .font(.system(size: size, weight: .medium, design: badgeDesign))
+            .foregroundStyle(style.textColor.opacity(opacity))
+            .lineLimit(1)
+            .minimumScaleFactor(0.35)
+    }
+
+    // Hours over minutes over seconds, like a flip clock. A unit that the
+    // horizontal pane already shows ("h") stays attached to its value; nothing
+    // new is introduced.
+    private func verticalRows(_ rows: [(value: String, unit: String?)],
+                              style: ThemeStyle, size: CGFloat,
+                              color: Color, glowOn: Bool) -> some View {
+        let unitSize = max(10, size * 0.38)
+        return VStack(spacing: 6) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                // The unit floats next to the digits instead of taking part in
+                // the layout, so every line stays on the same vertical axis.
+                verticalValue(row.value, style: style, size: size,
+                              color: color, glowOn: glowOn)
+                    .overlay(alignment: .trailing) {
+                        if let unit = row.unit {
+                            verticalUnit(unit, style: style, size: unitSize, opacity: 0.6)
+                                .offset(x: unitSize * 0.9)
+                        }
+                    }
+            }
+        }
+    }
+
+    private func verticalStandardPaneContent(mode: OverlayMode, style: ThemeStyle) -> some View {
+        let flashing = mode == .timer && tc.timerState == .finished
+        let glowOn = flashing ? flashOn : true
+        let color = activeTextColor(style, mode: mode)
+
+        var rows: [(value: String, unit: String?)] = []
+        var size = s.fontSize * 0.62
+
+        switch mode {
+        case .clock:
+            let comps = Calendar.current.dateComponents([.hour, .minute, .second], from: clockTime)
+            let rawHour = comps.hour ?? 0
+            let hour = s.use24Hour ? rawHour : (rawHour % 12 == 0 ? 12 : rawHour % 12)
+            rows = [(String(format: "%02d", hour), nil),
+                    (String(format: "%02d", comps.minute ?? 0), nil)]
+            if s.showSeconds {
+                rows.append((String(format: "%02d", comps.second ?? 0), nil))
+                size = s.fontSize * 0.52
+            }
+        case .timer, .stopwatch:
+            let seconds = mode == .timer
+                ? Int(max(0, tc.timerState == .finished ? tc.timerOvertime : tc.timerRemaining))
+                : Int(max(0, tc.stopwatchElapsed))
+            // Same information as the horizontal pane: hours, minutes, seconds.
+            rows = [(String(format: "%02d", seconds / 3600), nil),
+                    (String(format: "%02d", (seconds % 3600) / 60), nil),
+                    (String(format: "%02d", seconds % 60), nil)]
+            size = s.fontSize * 0.52
+        }
+
+        return VStack(spacing: 4) {
+            verticalRows(rows, style: style, size: size, color: color, glowOn: glowOn)
+            if mode != .clock {
+                verticalUnit(modeBadge(for: mode), style: style,
+                             size: max(9, s.fontSize * 0.17), opacity: 0.5)
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 6)
+    }
+
+    private func verticalWorkTimePaneContent(_ style: ThemeStyle) -> some View {
+        let roundedMinutes = s.workElapsedRoundedMinutes(now: clockTime)
+        let hours = roundedMinutes / 60
+        let minutes = roundedMinutes % 60
+        let valueColor = s.adaptiveColor ? adaptiveTextColor : style.textColor
+
+        return VStack(spacing: 4) {
+            verticalRows([(String(format: "%02d", hours), "h"),
+                          (String(format: "%02d", minutes), nil)],
+                         style: style, size: s.fontSize * 0.62,
+                         color: valueColor, glowOn: true)
+            verticalUnit("START \(s.workStartClockString(now: clockTime))",
+                         style: style, size: max(9, s.fontSize * 0.18), opacity: 0.62)
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 6)
     }
 
     private func standardPaneContent(mode: OverlayMode, style: ThemeStyle) -> some View {
@@ -216,18 +373,22 @@ struct ClockView: View {
                     .foregroundStyle(style.textColor.opacity(0.5))
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        // A vertical pane is only as wide as the horizontal bar is high, so it
+        // needs every point of width for the digits.
+        .padding(.horizontal, s.verticalLayout ? 4 : 16)
+        .padding(.vertical, s.verticalLayout ? 4 : 8)
     }
 
     private func workTimePaneContent(_ style: ThemeStyle) -> some View {
-        let roundedMinutes = s.workElapsedRoundedUpMinutes(now: clockTime)
+        let roundedMinutes = s.workElapsedRoundedMinutes(now: clockTime)
         let hours = roundedMinutes / 60
         let minutes = roundedMinutes % 60
         let valueColor = s.adaptiveColor ? adaptiveTextColor : style.textColor
 
         return VStack(spacing: 2) {
-            Text(String(format: "%d:%02d h", hours, minutes))
+            Text(s.verticalLayout
+                 ? String(format: "%d:%02d", hours, minutes)
+                 : String(format: "%d:%02d h", hours, minutes))
                 .font(.system(size: s.fontSize * 0.72,
                               weight: timeWeight,
                               design: timeDesign)
@@ -254,13 +415,13 @@ struct ClockView: View {
                 .minimumScaleFactor(0.6)
                 .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, s.verticalLayout ? 4 : 16)
+        .padding(.vertical, s.verticalLayout ? 4 : 8)
     }
 
     // Visual only: ClockWindow owns the hit areas so it can distinguish
     // close/reset from a click-to-toggle and from dragging.
-    private func paneControls(_ pane: Pane, _ style: ThemeStyle) -> some View {
+    private func paneControls(_ pane: Pane, _ style: ThemeStyle, isLastPane: Bool = false) -> some View {
         ZStack {
             VStack {
                 HStack {
@@ -276,13 +437,11 @@ struct ClockView: View {
                 VStack {
                     Spacer()
                     HStack {
+                        if s.verticalLayout { bottomControl(pane, style) }
                         Spacer()
-                        if pane.kind == .workTime && !s.workStartManual {
-                            startNowControl(style)
-                        } else {
-                            resetControl(style)
-                        }
+                        if !s.verticalLayout { bottomControl(pane, style) }
                     }
+                    .padding(.trailing, isLastPane && !s.verticalLayout ? 24 : 0)
                 }
                 .padding(8)
             }
@@ -297,6 +456,15 @@ struct ClockView: View {
             .background(Circle().fill(Color.white.opacity(0.07)))
             .overlay(Circle().strokeBorder(style.textColor.opacity(0.16), lineWidth: 0.5))
             .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+    }
+
+    @ViewBuilder
+    private func bottomControl(_ pane: Pane, _ style: ThemeStyle) -> some View {
+        if pane.kind == .workTime && !s.workStartManual {
+            startNowControl(style)
+        } else {
+            resetControl(style)
+        }
     }
 
     private func resetControl(_ style: ThemeStyle) -> some View {
@@ -347,8 +515,10 @@ struct ClockView: View {
         case .timer:
             // Finished = count up the delay before the break, so it is obvious
             // how long the "finish this first" window has been open.
-            return (tc.timerState == .finished ? tc.timerOvertime : tc.timerRemaining).hmsString
-        case .stopwatch: return tc.stopwatchElapsed.hmsString
+            let value = tc.timerState == .finished ? tc.timerOvertime : tc.timerRemaining
+            // The narrow vertical pane has room for MM:SS, not HH:MM:SS.
+            return s.verticalLayout ? value.mmssString : value.hmsString
+        case .stopwatch: return s.verticalLayout ? tc.stopwatchElapsed.mmssString : tc.stopwatchElapsed.hmsString
         }
     }
 
