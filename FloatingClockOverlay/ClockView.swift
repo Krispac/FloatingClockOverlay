@@ -260,17 +260,18 @@ struct ClockView: View {
                               style: ThemeStyle, size: CGFloat,
                               color: Color, glowOn: Bool) -> some View {
         let unitSize = max(10, size * 0.45)
-        // Every row reserves the same trailing slot, so the digits of all rows
-        // sit on one axis and the unit reads as part of the value ("02 h").
-        let unitSlot = unitSize * 1.1
         return VStack(spacing: 6) {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                HStack(alignment: .firstTextBaseline, spacing: 2) {
-                    verticalValue(row.value, style: style, size: size,
-                                  color: color, glowOn: glowOn)
-                    verticalUnit(row.unit ?? " ", style: style,
-                                 size: unitSize, opacity: row.unit == nil ? 0 : 0.85)
-                        .frame(width: unitSlot, alignment: .leading)
+                // The unit hangs off the digits as a small superscript, so it
+                // never shifts the number off the centre axis.
+                verticalValue(row.value, style: style, size: size,
+                              color: color, glowOn: glowOn)
+                    .fixedSize()
+                    .overlay(alignment: .topTrailing) {
+                        if let unit = row.unit {
+                            verticalUnit(unit, style: style, size: unitSize, opacity: 0.85)
+                                .offset(x: unitSize * 0.85, y: size * 0.02)
+                        }
                     }
             }
         }
@@ -454,7 +455,7 @@ struct ClockView: View {
                     x: 0, y: style.useNeonGlow ? 0 : 1
                 )
 
-            Text("START \(s.workStartClockString(now: clockTime))")
+            Text(s.workStartClockString(now: clockTime))
                 .font(.system(size: max(9, s.fontSize * 0.2),
                               weight: .medium,
                               design: labelDesign)
