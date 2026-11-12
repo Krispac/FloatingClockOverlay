@@ -6,6 +6,7 @@ struct ClockView: View {
 
     @State private var clockTime = Date()
     @State private var flashOn   = true
+    @State private var colonVisible = true
     @State private var sampledBrightness: CGFloat = 0.0
     @State private var useWhiteText: Bool = true
     @State private var hostWindow: NSWindow?
@@ -31,7 +32,10 @@ struct ClockView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .onReceive(clockTimer) { clockTime = $0 }
+        .onReceive(clockTimer) {
+            clockTime = $0
+            colonVisible.toggle()
+        }
         .onReceive(colorSampleTimer) { _ in
             guard adaptiveApplies else { return }
             guard let hostWindow else { return }
@@ -212,12 +216,17 @@ struct ClockView: View {
 
     private func verticalValue(_ text: String, style: ThemeStyle, size: CGFloat,
                                color: Color, glowOn: Bool) -> some View {
+        verticalValueText(Text(text), style: style, size: size, color: color, glowOn: glowOn)
+    }
+
+    private func verticalValueText(_ text: Text, style: ThemeStyle, size: CGFloat,
+                                   color: Color, glowOn: Bool) -> some View {
         // The horizontal glow radii (10/22) are tuned for the full-size digits.
         // On the smaller stacked digits they merge into one blob, so the
         // vertical strip gets its own, much tighter halo.
         let inner: CGFloat = style.useNeonGlow ? 5 : 2
         let outer: CGFloat = style.useNeonGlow ? 11 : 5
-        return Text(text)
+        return text
             .font(.system(size: size, weight: timeWeight, design: timeDesign)
                     .monospacedDigit())
             .tracking(timeTracking)
@@ -298,15 +307,25 @@ struct ClockView: View {
             size = s.fontSize * 0.52
         }
 
-        return VStack(spacing: 4) {
-            verticalRows(rows, style: style, size: size, color: color, glowOn: glowOn)
-            if mode != .clock {
-                verticalUnit(modeBadge(for: mode), style: style,
-                             size: max(9, s.fontSize * 0.17), opacity: 0.5)
+        return VStack(alignment: .leading, spacing: 6) {
+            // Label in the top-left corner; the corner buttons stay free.
+            verticalUnit(mode == .clock ? " " : modeBadge(for: mode), style: style,
+                         size: max(9, s.fontSize * 0.17), opacity: 0.5)
+            if mode == .clock {
+                // One row, like the horizontal clock, with the same gentle
+                // colon fade.
+                verticalValueText(displayText(for: .clock, style: style),
+                                  style: style, size: size, color: color, glowOn: glowOn)
+                    .animation(.easeInOut(duration: 0.55), value: colonVisible)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            } else {
+                verticalRows(rows, style: style, size: size, color: color, glowOn: glowOn)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
         }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 5)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
     }
 
     private func verticalWorkTimePaneContent(_ style: ThemeStyle) -> some View {
@@ -315,16 +334,18 @@ struct ClockView: View {
         let minutes = roundedMinutes % 60
         let valueColor = s.adaptiveColor ? adaptiveTextColor : style.textColor
 
-        return VStack(spacing: 4) {
+        return VStack(alignment: .leading, spacing: 6) {
+            verticalUnit(s.workStartClockString(now: clockTime),
+                         style: style, size: max(9, s.fontSize * 0.18), opacity: 0.55)
             verticalRows([(String(format: "%02d", hours), "h"),
                           (String(format: "%02d", minutes), nil)],
                          style: style, size: s.fontSize * 0.62,
                          color: valueColor, glowOn: true)
-            verticalUnit("START \(s.workStartClockString(now: clockTime))",
-                         style: style, size: max(9, s.fontSize * 0.18), opacity: 0.62)
+                .frame(maxWidth: .infinity, alignment: .center)
         }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 5)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
     }
 
     private func standardPaneContent(mode: OverlayMode, style: ThemeStyle) -> some View {
@@ -332,7 +353,7 @@ struct ClockView: View {
         let glowOn = flashing ? flashOn : true
 
         return VStack(spacing: 2) {
-            Text(displayString(for: mode))
+            displayText(for: mode, style: style)
                 .font(.system(size: s.fontSize,
                               weight: timeWeight,
                               design: timeDesign)
@@ -342,6 +363,7 @@ struct ClockView: View {
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.4)
                 .lineLimit(1)
+                .animation(.easeInOut(duration: 0.55), value: colonVisible)
                 .shadow(
                     color:  glowOrShadow(style, opacity: glowOn ? 0.9 : 0.4),
                     radius: style.useNeonGlow ? 10 : 3,
@@ -377,6 +399,21 @@ struct ClockView: View {
         // needs every point of width for the digits.
         .padding(.horizontal, s.verticalLayout ? 4 : 16)
         .padding(.vertical, s.verticalLayout ? 4 : 8)
+    }
+
+    // The clock's colon fades gently instead of hard-blinking.
+    private func displayText(for mode: OverlayMode, style: ThemeStyle) -> Text {
+        guard mode == .clock else { return Text(displayString(for: mode)) }
+        let parts = clockTimeString.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count >= 2 else { return Text(clockTimeString) }
+        let colon = activeTextColor(style, mode: mode).opacity(colonVisible ? 1 : 0.22)
+        var text = Text(parts[0]) + Text(":").foregroundColor(colon)
+        if parts.count > 2 {
+            text = text + Text(parts[1] + ":" + parts[2])
+        } else {
+            text = text + Text(parts[1])
+        }
+        return text
     }
 
     private func workTimePaneContent(_ style: ThemeStyle) -> some View {
@@ -437,9 +474,8 @@ struct ClockView: View {
                 VStack {
                     Spacer()
                     HStack {
-                        if s.verticalLayout { bottomControl(pane, style) }
                         Spacer()
-                        if !s.verticalLayout { bottomControl(pane, style) }
+                        bottomControl(pane, style)
                     }
                     .padding(.trailing, isLastPane && !s.verticalLayout ? 24 : 0)
                 }

@@ -1170,12 +1170,7 @@ class ClockWindow: NSWindow {
         // the corner. In the vertical strip that button sits outside.
         let s = ClockSettings.shared
         let extra: CGFloat = !s.verticalLayout && s.visiblePaneKinds.last == pane.kind ? 24 : 0
-        // Vertical panes put the reset/start button bottom-left, away from the
-        // centred digits.
-        let x = s.verticalLayout
-            ? pane.frame.minX + controlInset
-            : pane.frame.maxX - controlInset - controlSize - extra
-        return NSRect(x: x,
+        return NSRect(x: pane.frame.maxX - controlInset - controlSize - extra,
                y: pane.frame.minY + controlInset,
                width: controlSize,
                height: controlSize)
