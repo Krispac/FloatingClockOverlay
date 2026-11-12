@@ -215,16 +215,23 @@ struct ClockView: View {
     // MARK: - Vertical panes (narrow strip, values stacked in two lines)
 
     private func verticalValue(_ text: String, style: ThemeStyle, size: CGFloat,
-                               color: Color, glowOn: Bool) -> some View {
-        verticalValueText(Text(text), style: style, size: size, color: color, glowOn: glowOn)
+                               color: Color, glowOn: Bool, halo: Bool = true) -> some View {
+        verticalValueText(Text(text), style: style, size: size, color: color,
+                          glowOn: glowOn, halo: halo)
     }
 
     private func verticalValueText(_ text: Text, style: ThemeStyle, size: CGFloat,
-                                   color: Color, glowOn: Bool) -> some View {
+                                   color: Color, glowOn: Bool, halo: Bool) -> some View {
         // Tighter halo than the horizontal pane: at this type size the
-        // horizontal radii merge into one blob. This is the approved look.
-        let inner: CGFloat = style.useNeonGlow ? 5 : 2
-        let outer: CGFloat = style.useNeonGlow ? 11 : 5
+        // horizontal radii merge into one blob. The three-row timer stack is
+        // too dense for a halo at all, so it keeps only the soft drop shadow.
+        let neon = style.useNeonGlow && halo
+        let inner: CGFloat = neon ? 5 : 2
+        let outer: CGFloat = neon ? 11 : 5
+        func shadowColor(_ opacity: Double) -> Color {
+            neon ? style.glowColor.opacity(opacity)
+                 : Color.black.opacity(style.shadowOpacity * opacity)
+        }
         return text
             .font(.system(size: size, weight: timeWeight, design: timeDesign)
                     .monospacedDigit())
@@ -233,14 +240,14 @@ struct ClockView: View {
             .lineLimit(1)
             .minimumScaleFactor(0.4)
             .shadow(
-                color: glowOrShadow(style, opacity: glowOn ? 0.9 : 0.4),
+                color: shadowColor(glowOn ? 0.9 : 0.4),
                 radius: inner,
-                x: 0, y: style.useNeonGlow ? 0 : 1
+                x: 0, y: neon ? 0 : 1
             )
             .shadow(
-                color: glowOrShadow(style, opacity: glowOn ? 0.5 : 0.2),
+                color: shadowColor(glowOn ? 0.5 : 0.2),
                 radius: outer,
-                x: 0, y: style.useNeonGlow ? 0 : 4
+                x: 0, y: neon ? 0 : 4
             )
     }
 
@@ -258,14 +265,15 @@ struct ClockView: View {
     // new is introduced.
     private func verticalRows(_ rows: [(value: String, unit: String?)],
                               style: ThemeStyle, size: CGFloat,
-                              color: Color, glowOn: Bool) -> some View {
+                              color: Color, glowOn: Bool,
+                              halo: Bool = true) -> some View {
         let unitSize = max(10, size * 0.45)
         return VStack(spacing: 6) {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 // The unit hangs off the digits as a small superscript, so it
                 // never shifts the number off the centre axis.
                 verticalValue(row.value, style: style, size: size,
-                              color: color, glowOn: glowOn)
+                              color: color, glowOn: glowOn, halo: halo)
                     .fixedSize()
                     .overlay(alignment: .topTrailing) {
                         if let unit = row.unit {
@@ -342,7 +350,10 @@ struct ClockView: View {
                                   color: color, glowOn: glowOn)
                 }
             } else {
-                verticalRows(rows, style: style, size: size, color: color, glowOn: glowOn)
+                // Three rows stacked in the narrow strip: the halo turns into
+                // one warm blob, so only the top and bottom panes keep it.
+                verticalRows(rows, style: style, size: size, color: color,
+                             glowOn: glowOn, halo: false)
             }
         }
     }
@@ -484,7 +495,8 @@ struct ClockView: View {
             .padding(8)
 
             if pane.kind == .workTime ||
-               (pane.kind == .primary && s.overlayMode != .clock) {
+               (pane.kind == .primary && s.overlayMode != .clock) ||
+               pane.kind == .clock {
                 VStack {
                     Spacer()
                     HStack {
@@ -511,11 +523,55 @@ struct ClockView: View {
 
     @ViewBuilder
     private func bottomControl(_ pane: Pane, _ style: ThemeStyle) -> some View {
-        if pane.kind == .workTime && !s.workStartManual {
+        if pane.kind == .clock {
+            HStack(spacing: 6) {
+                settingsControl(style)
+                layoutControl(style)
+            }
+        } else if pane.kind == .workTime && !s.workStartManual {
             startNowControl(style)
+        } else if pane.kind == .primary && TimeController.shared.isOnBreak {
+            breakEndControl(style)
         } else {
             resetControl(style)
         }
+    }
+
+    // Settings stay reachable even when the system hides the menu bar icon.
+    private func settingsControl(_ style: ThemeStyle) -> some View {
+        Image(systemName: "gearshape")
+            .font(.system(size: 8, weight: .semibold))
+            .foregroundStyle(style.textColor.opacity(0.68))
+            .frame(width: 16, height: 16)
+            .background(Circle().fill(Color.white.opacity(0.07)))
+            .overlay(Circle().strokeBorder(style.textColor.opacity(0.16), lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+            .help("Settings")
+    }
+
+    // Leaves the break immediately and puts the timer back at its start value.
+    private func breakEndControl(_ style: ThemeStyle) -> some View {
+        Image(systemName: "forward.end.fill")
+            .font(.system(size: 7, weight: .bold))
+            .foregroundStyle(style.textColor.opacity(0.74))
+            .frame(width: 16, height: 16)
+            .background(Circle().fill(Color.white.opacity(0.09)))
+            .overlay(Circle().strokeBorder(style.textColor.opacity(0.20), lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+            .help("End break")
+    }
+
+    // Switches between the horizontal bar and the vertical strip without
+    // digging through the menu bar.
+    private func layoutControl(_ style: ThemeStyle) -> some View {
+        Image(systemName: s.verticalLayout ? "rectangle" : "rectangle.portrait")
+            .font(.system(size: 8, weight: .semibold))
+            .foregroundStyle(style.textColor.opacity(0.68))
+            .frame(width: 16, height: 16)
+            .background(Circle().fill(Color.white.opacity(0.07)))
+            .overlay(Circle().strokeBorder(style.textColor.opacity(0.16), lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+            .help(s.verticalLayout ? "Horizontal layout" : "Vertical layout")
     }
 
     private func resetControl(_ style: ThemeStyle) -> some View {

@@ -689,13 +689,14 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
     }
 
     // Click-through normally makes the overlay transparent to the mouse. When
-    // the timer reaches zero, keep the overlay clickable so the user can start
-    // the break with the same single click that acknowledges the alert. The
+    // the timer reaches zero or a break runs, keep the overlay clickable so the
+    // user can acknowledge the alert or end the break with a single click. The
     // user's Click-Through preference is not changed.
     private func applyMousePassthrough() {
         guard let window = window else { return }
-        let finishedTimerNeedsClick = TimeController.shared.timerState == .finished
-        window.ignoresMouseEvents = s.isClickThrough && !finishedTimerNeedsClick
+        let tc = TimeController.shared
+        let interactionRequired = tc.timerState == .finished || tc.isOnBreak
+        window.ignoresMouseEvents = s.isClickThrough && !interactionRequired
     }
 
     // MARK: - Click-Through Button
@@ -1095,6 +1096,15 @@ class ClockWindow: NSWindow {
             return
         }
 
+        if let pane = pane, pane.kind == .clock, settingsRect(for: pane).contains(loc) {
+            if event.clickCount == 1 {
+                pendingSingleClick?.cancel()
+                pendingSingleClick = nil
+                NotificationCenter.default.post(name: .openSettings, object: nil)
+            }
+            return
+        }
+
         if event.clickCount == 2 {
             pendingSingleClick?.cancel()
             pendingSingleClick = nil
@@ -1171,9 +1181,14 @@ class ClockWindow: NSWindow {
         let s = ClockSettings.shared
         let extra: CGFloat = !s.verticalLayout && s.visiblePaneKinds.last == pane.kind ? 24 : 0
         let inset = controlInset
+        // The clock pane shows a settings button beside the layout switch, so
+        // the pair is centred as a whole instead of the switch alone.
+        let pairShift: CGFloat = s.verticalLayout && pane.kind == .clock
+            ? (controlSize + 6) / 2
+            : 0
         // Vertical: the button shares the centre axis with the label above it.
         let x = s.verticalLayout
-            ? pane.frame.midX - controlSize / 2
+            ? pane.frame.midX + pairShift - controlSize / 2
             : pane.frame.maxX - inset - controlSize - extra
         return NSRect(x: x,
                y: pane.frame.minY + inset,
@@ -1182,11 +1197,17 @@ class ClockWindow: NSWindow {
             .insetBy(dx: -controlHitPadding, dy: -controlHitPadding)
     }
 
+    private func settingsRect(for pane: PaneHitArea) -> NSRect {
+        var rect = resetRect(for: pane)
+        rect.origin.x -= controlSize + 6
+        return rect
+    }
+
     private func hasResetControl(_ pane: PaneHitArea) -> Bool {
         switch pane.kind {
         case .workTime: return true
         case .primary:  return ClockSettings.shared.overlayMode != .clock
-        case .clock:    return false
+        case .clock:    return true
         }
     }
 
@@ -1258,7 +1279,7 @@ class ClockWindow: NSWindow {
             case .clock:     break
             }
         case .clock:
-            break
+            ClockSettings.shared.verticalLayout.toggle()
         }
     }
 }
