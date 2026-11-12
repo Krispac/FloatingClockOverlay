@@ -312,12 +312,19 @@ struct ClockView: View {
             verticalUnit(mode == .clock ? " " : modeBadge(for: mode), style: style,
                          size: max(9, s.fontSize * 0.17), opacity: 0.5)
             if mode == .clock {
-                // One row, like the horizontal clock, with the same gentle
-                // colon fade.
-                verticalValueText(displayText(for: .clock, style: style),
-                                  style: style, size: size, color: color, glowOn: glowOn)
-                    .animation(.easeInOut(duration: 0.55), value: colonVisible)
-                    .frame(maxWidth: .infinity, alignment: .center)
+                VStack(spacing: 0) {
+                    verticalValue(rows[0].value, style: style, size: size,
+                                  color: color, glowOn: glowOn)
+                    // Horizontal separator between the stacked hour and minute:
+                    // two dots side by side instead of a vertical colon.
+                    Text(". .")
+                        .font(.system(size: size * 0.8, weight: timeWeight, design: timeDesign))
+                        .foregroundColor(color.opacity(colonVisible ? 1 : 0.2))
+                        .animation(.easeInOut(duration: 0.55), value: colonVisible)
+                    verticalValue(rows[1].value, style: style, size: size,
+                                  color: color, glowOn: glowOn)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
             } else {
                 verticalRows(rows, style: style, size: size, color: color, glowOn: glowOn)
                     .frame(maxWidth: .infinity, alignment: .center)
