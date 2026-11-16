@@ -557,7 +557,6 @@ struct ClockView: View {
                     HStack {
                         Spacer()
                         bottomControl(pane, style)
-                        if s.verticalLayout { Spacer() }
                     }
                     .padding(.trailing, isLastPane && !s.verticalLayout ? 24 : 0)
                 }
