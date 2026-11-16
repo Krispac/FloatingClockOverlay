@@ -1197,11 +1197,12 @@ class ClockWindow: NSWindow {
             .insetBy(dx: -controlHitPadding, dy: -controlHitPadding)
     }
 
-    // Which pane hosts the small controls. Horizontal: the first pane carries
-    // settings (top-left) and the layout switch (bottom-left); the middle pane
-    // carries the centre-at-top action. Vertical keeps the pair on the clock.
+    // Which pane hosts the small controls. The first pane carries settings in
+    // its top-left corner; the layout switch sits bottom-left in the horizontal
+    // bar and bottom-right on the vertical strip. The middle pane carries the
+    // centre-at-top action.
     private var settingsControlPane: OverlayPaneKind? {
-        ClockSettings.shared.verticalLayout ? .clock : paneHitAreas.first?.kind
+        paneHitAreas.first?.kind
     }
 
     private var layoutControlPane: OverlayPaneKind? {
@@ -1211,22 +1212,23 @@ class ClockWindow: NSWindow {
     private var centerControlPane: OverlayPaneKind { .primary }
 
     private func settingsRect(for pane: PaneHitArea) -> NSRect {
-        let s = ClockSettings.shared
-        if s.verticalLayout {
-            var rect = resetRect(for: pane)
-            rect.origin.x -= 14 + 4
-            return rect
-        }
+        let size = ClockSettings.shared.verticalLayout ? 14.0 : controlSize
         return NSRect(x: pane.frame.minX + controlInset,
-                      y: pane.frame.maxY - controlInset - controlSize,
-                      width: controlSize,
-                      height: controlSize)
+                      y: pane.frame.maxY - controlInset - size,
+                      width: size,
+                      height: size)
             .insetBy(dx: -controlHitPadding, dy: -controlHitPadding)
     }
 
     private func layoutRect(for pane: PaneHitArea) -> NSRect {
         let s = ClockSettings.shared
-        if s.verticalLayout { return resetRect(for: pane) }
+        if s.verticalLayout {
+            return NSRect(x: pane.frame.maxX - controlInset - 14,
+                          y: pane.frame.minY + controlInset,
+                          width: 14,
+                          height: 14)
+                .insetBy(dx: -controlHitPadding, dy: -controlHitPadding)
+        }
         let extra: CGFloat = NSScreen.screens.count > 1 ? controlSize + 6 : 0
         return NSRect(x: pane.frame.minX + controlInset + extra,
                       y: pane.frame.minY + controlInset,
@@ -1249,18 +1251,10 @@ class ClockWindow: NSWindow {
         let s = ClockSettings.shared
         let extra: CGFloat = !s.verticalLayout && s.visiblePaneKinds.last == pane.kind ? 24 : 0
         let inset = controlInset
-        // The clock pane pairs its switch with a settings button; the narrow
-        // strip uses slightly smaller circles for the pair.
         let pairSize = s.verticalLayout ? 14.0 : controlSize
-        let pairGap: CGFloat = s.verticalLayout ? 4 : 6
-        // The clock pane shows a settings button beside the layout switch, so
-        // the pair is centred as a whole instead of the switch alone.
-        let pairShift: CGFloat = s.verticalLayout && pane.kind == .clock
-            ? (pairSize + pairGap) / 2
-            : 0
-        // Vertical: the button shares the centre axis with the label above it.
+        // Vertical: the reset/play button mirrors the left-hand action button.
         let x = s.verticalLayout
-            ? pane.frame.midX + pairShift - pairSize / 2
+            ? pane.frame.maxX - inset - pairSize
             : pane.frame.maxX - inset - pairSize - extra
         return NSRect(x: x,
                y: pane.frame.minY + inset,
@@ -1273,7 +1267,7 @@ class ClockWindow: NSWindow {
         switch pane.kind {
         case .workTime: return true
         case .primary:  return ClockSettings.shared.overlayMode != .clock
-        case .clock:    return ClockSettings.shared.verticalLayout
+        case .clock:    return false
         }
     }
 

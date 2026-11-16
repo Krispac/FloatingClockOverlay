@@ -516,9 +516,8 @@ struct ClockView: View {
             }
             .padding(8)
 
-            // Settings: top-left of the first pane in the horizontal bar; the
-            // narrow strip keeps the pair at the bottom of the clock pane.
-            if !s.verticalLayout && isFirstPane {
+            // Settings: top-left of the first pane, in both layouts.
+            if isFirstPane {
                 VStack {
                     HStack {
                         settingsControl(style)
@@ -592,10 +591,8 @@ struct ClockView: View {
     @ViewBuilder
     private func bottomControl(_ pane: Pane, _ style: ThemeStyle) -> some View {
         if pane.kind == .clock {
-            HStack(spacing: s.verticalLayout ? 4 : 6) {
-                settingsControl(style)
-                layoutControl(style)
-            }
+            // Vertical strip: the switch mirrors the screen button on the left.
+            layoutControl(style)
         } else if pane.kind == .workTime && !s.workStartManual {
             startNowControl(style)
         } else if pane.kind == .primary && TimeController.shared.isOnBreak {
