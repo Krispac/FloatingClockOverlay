@@ -479,7 +479,7 @@ final class ClockSettings: ObservableObject {
 
     // MARK: - Position Presets (used by ClockWindowController)
 
-    enum PositionPreset { case topCenter, topLeft, topRight, bottomLeft, bottomRight, center, reset }
+    enum PositionPreset { case topCenter, rightCenter, topLeft, topRight, bottomLeft, bottomRight, center, reset }
 }
 
 extension Notification.Name {

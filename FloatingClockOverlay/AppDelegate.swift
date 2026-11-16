@@ -21,6 +21,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var timerModeItem:     NSMenuItem?
     private var stopwatchModeItem: NSMenuItem?
     private var verticalLayoutItem: NSMenuItem?
+    private var centerTopItem:      NSMenuItem?
 
     // MARK: - Lifecycle
 
@@ -128,6 +129,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let centerTop = NSMenuItem(title: NSLocalizedString("Center at Top", comment: ""),
                                    action: #selector(centerAtTop), keyEquivalent: "")
         centerTop.target = self
+        centerTopItem = centerTop
         menu.addItem(centerTop)
 
         let standard = NSMenuItem(title: NSLocalizedString("Standard Layout", comment: ""),
@@ -189,6 +191,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         timerModeItem?.state     = s.overlayMode == .timer     ? .on : .off
         stopwatchModeItem?.state = s.overlayMode == .stopwatch ? .on : .off
         verticalLayoutItem?.state = s.verticalLayout ? .on : .off
+        centerTopItem?.title = s.verticalLayout
+            ? NSLocalizedString("Center at Right", comment: "")
+            : NSLocalizedString("Center at Top", comment: "")
     }
 
     // MARK: - Menu Actions
@@ -212,8 +217,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func centerAtTop() {
-        NotificationCenter.default.post(name: .moveToPreset,
-                                        object: ClockSettings.PositionPreset.topCenter)
+        let preset: ClockSettings.PositionPreset =
+            ClockSettings.shared.verticalLayout ? .rightCenter : .topCenter
+        NotificationCenter.default.post(name: .moveToPreset, object: preset)
     }
     @objc private func toggleClickThrough()  { ClockSettings.shared.isClickThrough.toggle() }
 

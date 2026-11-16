@@ -611,6 +611,7 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         let origin: NSPoint
         switch preset {
         case .topCenter:   origin = NSPoint(x: f.midX - w/2,   y: f.maxY - h)
+        case .rightCenter: origin = NSPoint(x: f.maxX - w,     y: f.midY - h/2)
         case .topLeft:     origin = NSPoint(x: f.minX + p,     y: f.maxY - h - p)
         case .topRight:    origin = NSPoint(x: f.maxX - w - p, y: f.maxY - h - p)
         case .bottomLeft:  origin = NSPoint(x: f.minX + p,     y: f.minY + p)
@@ -1094,8 +1095,11 @@ class ClockWindow: NSWindow {
             if event.clickCount == 1 {
                 pendingSingleClick?.cancel()
                 pendingSingleClick = nil
+                // A wide bar snaps to the top edge, a tall strip to the right.
+                let preset: ClockSettings.PositionPreset =
+                    ClockSettings.shared.verticalLayout ? .rightCenter : .topCenter
                 NotificationCenter.default.post(name: .moveToPreset,
-                                                object: ClockSettings.PositionPreset.topCenter)
+                                                object: preset)
             }
             return
         }
@@ -1223,10 +1227,14 @@ class ClockWindow: NSWindow {
     private func layoutRect(for pane: PaneHitArea) -> NSRect {
         let s = ClockSettings.shared
         if s.verticalLayout {
-            return NSRect(x: pane.frame.maxX - controlInset - 14,
+            let size: CGFloat = 14
+            let x = bottomIsSolo(.clock)
+                ? pane.frame.midX - size / 2
+                : pane.frame.maxX - controlInset - size
+            return NSRect(x: x,
                           y: pane.frame.minY + controlInset,
-                          width: 14,
-                          height: 14)
+                          width: size,
+                          height: size)
                 .insetBy(dx: -controlHitPadding, dy: -controlHitPadding)
         }
         let extra: CGFloat = NSScreen.screens.count > 1 ? controlSize + 6 : 0
@@ -1238,11 +1246,25 @@ class ClockWindow: NSWindow {
     }
 
     private func centerRect(for pane: PaneHitArea) -> NSRect {
-        NSRect(x: pane.frame.minX + controlInset,
-               y: pane.frame.minY + controlInset,
-               width: controlSize,
-               height: controlSize)
+        let x = bottomIsSolo(pane.kind)
+            ? pane.frame.midX - controlSize / 2
+            : pane.frame.minX + controlInset
+        return NSRect(x: x,
+                      y: pane.frame.minY + controlInset,
+                      width: controlSize,
+                      height: controlSize)
             .insetBy(dx: -controlHitPadding, dy: -controlHitPadding)
+    }
+
+    // A vertical pane row with a single action centres it; two actions split.
+    private func bottomIsSolo(_ kind: OverlayPaneKind) -> Bool {
+        let s = ClockSettings.shared
+        guard s.verticalLayout else { return false }
+        switch kind {
+        case .workTime: return true
+        case .primary:  return s.overlayMode == .clock
+        case .clock:    return NSScreen.screens.count <= 1
+        }
     }
 
     private func resetRect(for pane: PaneHitArea) -> NSRect {
@@ -1252,9 +1274,12 @@ class ClockWindow: NSWindow {
         let extra: CGFloat = !s.verticalLayout && s.visiblePaneKinds.last == pane.kind ? 24 : 0
         let inset = controlInset
         let pairSize = s.verticalLayout ? 14.0 : controlSize
-        // Vertical: the reset/play button mirrors the left-hand action button.
+        // Vertical: the reset/play button mirrors the left-hand action button,
+        // unless it is alone in its row, where it is centred.
         let x = s.verticalLayout
-            ? pane.frame.maxX - inset - pairSize
+            ? (bottomIsSolo(pane.kind)
+                ? pane.frame.midX - pairSize / 2
+                : pane.frame.maxX - inset - pairSize)
             : pane.frame.maxX - inset - pairSize - extra
         return NSRect(x: x,
                y: pane.frame.minY + inset,

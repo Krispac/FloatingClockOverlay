@@ -505,6 +505,11 @@ struct ClockView: View {
         // The screen-switch button lives in the window's bottom-left corner, so
         // the layout switch steps aside when that button is on screen.
         let layoutLeading: CGFloat = isFirstPane && NSScreen.screens.count > 1 ? 30 : 8
+        // One action in the row is centred; two actions split left and right.
+        let soloBottom = s.verticalLayout && (
+            pane.kind == .workTime ||
+            (pane.kind == .primary && s.overlayMode == .clock) ||
+            (pane.kind == .clock && NSScreen.screens.count <= 1))
 
         return ZStack {
             VStack {
@@ -543,10 +548,11 @@ struct ClockView: View {
                 VStack {
                     Spacer()
                     HStack {
+                        if soloBottom { Spacer() }
                         centerControl(style)
                         Spacer()
                     }
-                    .padding(.leading, 8)
+                    .padding(.leading, soloBottom ? 0 : 8)
                     .padding(.bottom, 8)
                 }
             }
@@ -557,6 +563,7 @@ struct ClockView: View {
                     HStack {
                         Spacer()
                         bottomControl(pane, style)
+                        if soloBottom { Spacer() }
                     }
                     .padding(.trailing, isLastPane && !s.verticalLayout ? 24 : 0)
                 }
@@ -603,14 +610,14 @@ struct ClockView: View {
 
     // Snaps the bar to the top edge of its screen, centred horizontally.
     private func centerControl(_ style: ThemeStyle) -> some View {
-        Image(systemName: "arrow.up.to.line")
+        Image(systemName: s.verticalLayout ? "arrow.right.to.line" : "arrow.up.to.line")
             .font(.system(size: 8, weight: .semibold))
             .foregroundStyle(style.textColor.opacity(0.68))
             .frame(width: 16, height: 16)
             .background(Circle().fill(Color.white.opacity(0.07)))
             .overlay(Circle().strokeBorder(style.textColor.opacity(0.16), lineWidth: 0.5))
             .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
-            .help("Center at top")
+            .help(s.verticalLayout ? "Center at right" : "Center at top")
     }
 
     // Settings stay reachable even when the system hides the menu bar icon.
@@ -670,6 +677,7 @@ struct ClockView: View {
             .background(Circle().fill(Color.white.opacity(0.09)))
             .overlay(Circle().strokeBorder(style.textColor.opacity(0.20), lineWidth: 0.5))
             .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+            .help("Start work time now")
     }
 
     private func switchScreenControl(_ style: ThemeStyle) -> some View {
