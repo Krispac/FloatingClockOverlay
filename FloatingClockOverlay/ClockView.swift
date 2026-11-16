@@ -7,6 +7,7 @@ struct ClockView: View {
     @State private var clockTime = Date()
     @State private var flashOn   = true
     @State private var colonVisible = true
+    @State private var pressPulse = false
     @State private var sampledBrightness: CGFloat = 0.0
     @State private var useWhiteText: Bool = true
     @State private var hostWindow: NSWindow?
@@ -36,6 +37,7 @@ struct ClockView: View {
             clockTime = $0
             colonVisible.toggle()
         }
+        .onChange(of: tc.timerState) { _ in pressPulseNow() }
         .onReceive(colorSampleTimer) { _ in
             guard adaptiveApplies else { return }
             guard let hostWindow else { return }
@@ -127,7 +129,9 @@ struct ClockView: View {
             if s.verticalLayout {
                 VStack(spacing: 0) {
                     ForEach(panes) { pane in
-                        paneControls(pane, style, isLastPane: pane.id == panes.last?.id)
+                        paneControls(pane, style,
+                                     isLastPane: pane.id == panes.last?.id,
+                                     isFirstPane: pane.id == panes.first?.id)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
@@ -135,7 +139,9 @@ struct ClockView: View {
             } else {
                 HStack(spacing: 0) {
                     ForEach(panes) { pane in
-                        paneControls(pane, style, isLastPane: pane.id == panes.last?.id)
+                        paneControls(pane, style,
+                                     isLastPane: pane.id == panes.last?.id,
+                                     isFirstPane: pane.id == panes.first?.id)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
@@ -193,8 +199,15 @@ struct ClockView: View {
 
     // MARK: - Pane content
 
-    @ViewBuilder
     private func paneContent(_ pane: Pane, _ style: ThemeStyle) -> some View {
+        paneContentBody(pane, style)
+            // A quick press pulse is the "yes, it registered" cue when the
+            // timer starts, pauses or resumes.
+            .scaleEffect(pane.kind == .primary && pressPulse ? 1.05 : 1)
+    }
+
+    @ViewBuilder
+    private func paneContentBody(_ pane: Pane, _ style: ThemeStyle) -> some View {
         if s.verticalLayout {
             switch pane.kind {
             case .workTime:
@@ -483,8 +496,17 @@ struct ClockView: View {
 
     // Visual only: ClockWindow owns the hit areas so it can distinguish
     // close/reset from a click-to-toggle and from dragging.
-    private func paneControls(_ pane: Pane, _ style: ThemeStyle, isLastPane: Bool = false) -> some View {
-        ZStack {
+    private func paneControls(_ pane: Pane, _ style: ThemeStyle,
+                              isLastPane: Bool = false,
+                              isFirstPane: Bool = false) -> some View {
+        let showsBottomRight = pane.kind == .workTime
+            || (pane.kind == .primary && s.overlayMode != .clock)
+            || (pane.kind == .clock && s.verticalLayout)
+        // The screen-switch button lives in the window's bottom-left corner, so
+        // the layout switch steps aside when that button is on screen.
+        let layoutLeading: CGFloat = isFirstPane && NSScreen.screens.count > 1 ? 30 : 8
+
+        return ZStack {
             VStack {
                 HStack {
                     Spacer()
@@ -494,9 +516,43 @@ struct ClockView: View {
             }
             .padding(8)
 
-            if pane.kind == .workTime ||
-               (pane.kind == .primary && s.overlayMode != .clock) ||
-               pane.kind == .clock {
+            // Settings: top-left of the first pane in the horizontal bar; the
+            // narrow strip keeps the pair at the bottom of the clock pane.
+            if !s.verticalLayout && isFirstPane {
+                VStack {
+                    HStack {
+                        settingsControl(style)
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(8)
+            }
+
+            if !s.verticalLayout {
+                VStack {
+                    Spacer()
+                    HStack(spacing: 6) {
+                        if isFirstPane { layoutControl(style) }
+                        if pane.kind == .primary { centerControl(style) }
+                        Spacer()
+                    }
+                    .padding(.leading, layoutLeading)
+                    .padding(.bottom, 8)
+                }
+            } else if pane.kind == .primary {
+                VStack {
+                    Spacer()
+                    HStack {
+                        centerControl(style)
+                        Spacer()
+                    }
+                    .padding(.leading, 8)
+                    .padding(.bottom, 8)
+                }
+            }
+
+            if showsBottomRight {
                 VStack {
                     Spacer()
                     HStack {
@@ -511,6 +567,15 @@ struct ClockView: View {
                 .padding(.horizontal, s.verticalLayout ? 4 : 8)
                 .padding(.vertical, 8)
             }
+        }
+    }
+
+    // Short, unmistakable press feedback: a quick scale bump that settles back.
+    private func pressPulseNow() {
+        pressPulse = false
+        withAnimation(.easeOut(duration: 0.10)) { pressPulse = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            withAnimation(.easeInOut(duration: 0.30)) { pressPulse = false }
         }
     }
 
@@ -538,6 +603,18 @@ struct ClockView: View {
         } else {
             resetControl(style)
         }
+    }
+
+    // Snaps the bar to the top edge of its screen, centred horizontally.
+    private func centerControl(_ style: ThemeStyle) -> some View {
+        Image(systemName: "arrow.up.to.line")
+            .font(.system(size: 8, weight: .semibold))
+            .foregroundStyle(style.textColor.opacity(0.68))
+            .frame(width: 16, height: 16)
+            .background(Circle().fill(Color.white.opacity(0.07)))
+            .overlay(Circle().strokeBorder(style.textColor.opacity(0.16), lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
+            .help("Center at top")
     }
 
     // Settings stay reachable even when the system hides the menu bar icon.

@@ -113,7 +113,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Keep this short: only the actions used day to day. Everything else
         // lives in Settings.
-        let show = NSMenuItem(title: NSLocalizedString("Show Overlay", comment: ""),
+        let show = NSMenuItem(title: NSLocalizedString("Show Clock", comment: ""),
                               action: #selector(toggleVisibility), keyEquivalent: "h")
         show.keyEquivalentModifierMask = [.command, .shift]
         let ct   = NSMenuItem(title: NSLocalizedString("Click-Through: ON ✓", comment: ""),
@@ -124,6 +124,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(show)
         menu.addItem(ct)
         menu.addItem(.separator())
+
+        let centerTop = NSMenuItem(title: NSLocalizedString("Center at Top", comment: ""),
+                                   action: #selector(centerAtTop), keyEquivalent: "")
+        centerTop.target = self
+        menu.addItem(centerTop)
 
         let standard = NSMenuItem(title: NSLocalizedString("Standard Layout", comment: ""),
                                   action: #selector(restoreStandardLayout), keyEquivalent: "")
@@ -176,7 +181,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let tc = TimeController.shared
 
         let overlayShown = s.isVisible && s.visiblePaneCount > 0
-        showHideItem?.title      = overlayShown     ? NSLocalizedString("Hide Overlay", comment: "") : NSLocalizedString("Show Overlay", comment: "")
+        showHideItem?.title      = overlayShown     ? NSLocalizedString("Hide Clock", comment: "") : NSLocalizedString("Show Clock", comment: "")
         clickThroughItem?.title  = s.isClickThrough ? NSLocalizedString("Click-Through: ON ✓", comment: "") : NSLocalizedString("Click-Through: OFF", comment: "")
         launchAtLoginItem?.state = s.launchAtLogin  ? .on                   : .off
 
@@ -204,6 +209,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             s.isVisible.toggle()
         }
+    }
+
+    @objc private func centerAtTop() {
+        NotificationCenter.default.post(name: .moveToPreset,
+                                        object: ClockSettings.PositionPreset.topCenter)
     }
     @objc private func toggleClickThrough()  { ClockSettings.shared.isClickThrough.toggle() }
 

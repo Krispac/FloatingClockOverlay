@@ -157,7 +157,7 @@ struct SettingsView: View {
                 ToggleRow(icon: "hand.point.up.left",
                           label: "Manual Start Time",
                           value: $s.workStartManual,
-                          hint: "When off, the pane uses the first app launch/full wake, or today's Start now override")
+                          hint: "Applies to today only. Tomorrow the pane returns to the first app launch/full wake, or today's Start now override")
                 SettingsDivider()
                 if s.workStartManual {
                     SettingsRow(icon: "clock", label: "Start Time") {

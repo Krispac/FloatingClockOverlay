@@ -66,6 +66,9 @@ final class ClockSettings: ObservableObject {
     @Published var timerSoundEnabled: Bool
     @Published var breakEndSoundEnabled: Bool
     @Published var workStartManual: Bool
+    // Manual start is a one-day override: the day it was set. On the next day
+    // the pane falls back to the automatic first-wake start.
+    @Published var workStartManualDay: String
     @Published var workStartHour:   Int
     @Published var workStartMinute: Int
     @Published var workSessionStart: Date
@@ -151,6 +154,7 @@ final class ClockSettings: ObservableObject {
         timerSoundEnabled = bool("timerSoundEnabled", default: true)
         breakEndSoundEnabled = bool("breakEndSoundEnabled", default: false)
         workStartManual   = bool("workStartManual",   default: false)
+        workStartManualDay = str("workStartManualDay") ?? ""
         let now = Date()
         let storedStart = dbl("workSessionStart", default: 0)
         let candidateStart = storedStart > 0
@@ -191,6 +195,12 @@ final class ClockSettings: ObservableObject {
         mirrorToAllDisplays = bool("mirrorToAllDisplays", default: false)
         verticalLayout      = bool("verticalLayout",      default: false)
         clockLanguage       = str("clockLanguage") ?? ""
+
+        if workStartManual && workStartManualDay != Self.dayKey(now) {
+            // Yesterday's manual override must not freeze today's start.
+            workStartManual = false
+            d.set(false, forKey: "workStartManual")
+        }
 
         setupPersistence()
         d.set(workSessionStart.timeIntervalSince1970, forKey: "workSessionStart")
@@ -249,8 +259,16 @@ final class ClockSettings: ObservableObject {
         $timerSoundEnabled.dropFirst().sink { d.set($0, forKey: "timerSoundEnabled") }.store(in: &cancellables)
         $breakEndSoundEnabled.dropFirst().sink { d.set($0, forKey: "breakEndSoundEnabled") }.store(in: &cancellables)
         $workStartManual  .dropFirst().sink { d.set($0, forKey: "workStartManual")   }.store(in: &cancellables)
+        $workStartManualDay.dropFirst().sink { d.set($0, forKey: "workStartManualDay") }.store(in: &cancellables)
         $workStartHour    .dropFirst().sink { d.set($0, forKey: "workStartHour")     }.store(in: &cancellables)
         $workStartMinute  .dropFirst().sink { d.set($0, forKey: "workStartMinute")   }.store(in: &cancellables)
+
+        // Turning the manual start on, or editing its time, pins it to today.
+        $workStartManual.dropFirst().sink { [weak self] on in
+            if on { self?.markManualStartToday() }
+        }.store(in: &cancellables)
+        $workStartHour.dropFirst().sink { [weak self] _ in self?.markManualStartToday() }.store(in: &cancellables)
+        $workStartMinute.dropFirst().sink { [weak self] _ in self?.markManualStartToday() }.store(in: &cancellables)
         $workSessionStart .dropFirst().sink { d.set($0.timeIntervalSince1970, forKey: "workSessionStart") }.store(in: &cancellables)
         $workStartOverride.dropFirst().sink { date in
             if let date {
@@ -361,12 +379,26 @@ final class ClockSettings: ObservableObject {
     func refreshWorkSessionStartIfNeeded(now: Date = Date(), requireAwakeDisplay: Bool = false) {
         if requireAwakeDisplay && !Self.hasAwakeDisplay() { return }
         let calendar = Calendar.current
+        if workStartManual && workStartManualDay != Self.dayKey(now) {
+            workStartManual = false
+        }
         if let override = workStartOverride, !calendar.isDate(override, inSameDayAs: now) {
             workStartOverride = nil
         }
         if !calendar.isDate(workSessionStart, inSameDayAs: now) || workSessionStart > now {
             workSessionStart = now
         }
+    }
+
+    static func dayKey(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
+    private func markManualStartToday() {
+        let key = Self.dayKey(Date())
+        if workStartManualDay != key { workStartManualDay = key }
     }
 
     private static func hasAwakeDisplay() -> Bool {
@@ -378,12 +410,21 @@ final class ClockSettings: ObservableObject {
     }
 
     func workStartDate(now: Date = Date()) -> Date {
-        if workStartManual {
-            var components = Calendar.current.dateComponents([.year, .month, .day], from: now)
+        if workStartManual && workStartManualDay == Self.dayKey(now) {
+            let calendar = Calendar.current
+            var components = calendar.dateComponents([.year, .month, .day], from: now)
             components.hour = min(23, max(0, workStartHour))
             components.minute = min(59, max(0, workStartMinute))
             components.second = 0
-            return Calendar.current.date(from: components) ?? now
+            let manual = calendar.date(from: components) ?? now
+            if manual <= now { return manual }
+            // A manual time later than "now" cannot be the start of today's
+            // work. Falling back to the automatic first-wake value beats a
+            // pane that reads 0:00 and a start time in the future.
+            if calendar.isDate(workSessionStart, inSameDayAs: now), workSessionStart <= now {
+                return workSessionStart
+            }
+            return now
         }
 
         if let override = workStartOverride,

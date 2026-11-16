@@ -33,7 +33,10 @@ class ClockWindowController: NSWindowController, NSWindowDelegate {
         self.restoresSavedPosition = restoresSavedPosition
         let window = ClockWindow(
             contentRect: .zero,
-            styleMask: [.borderless, .resizable],
+            // Deliberately not resizable: macOS only offers edge tiling for
+            // resizable windows, and the bar must never be caught by a
+            // screen-edge hot spot.
+            styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
@@ -1087,20 +1090,39 @@ class ClockWindow: NSWindow {
             return
         }
 
+        if let pane = pane, pane.kind == centerControlPane, centerRect(for: pane).contains(loc) {
+            if event.clickCount == 1 {
+                pendingSingleClick?.cancel()
+                pendingSingleClick = nil
+                NotificationCenter.default.post(name: .moveToPreset,
+                                                object: ClockSettings.PositionPreset.topCenter)
+            }
+            return
+        }
+
+        if let pane = pane, pane.kind == settingsControlPane, settingsRect(for: pane).contains(loc) {
+            if event.clickCount == 1 {
+                pendingSingleClick?.cancel()
+                pendingSingleClick = nil
+                NotificationCenter.default.post(name: .openSettings, object: nil)
+            }
+            return
+        }
+
+        if let pane = pane, pane.kind == layoutControlPane, layoutRect(for: pane).contains(loc) {
+            if event.clickCount == 1 {
+                pendingSingleClick?.cancel()
+                pendingSingleClick = nil
+                ClockSettings.shared.verticalLayout.toggle()
+            }
+            return
+        }
+
         if let pane = pane, hasResetControl(pane), resetRect(for: pane).contains(loc) {
             if event.clickCount == 1 {
                 pendingSingleClick?.cancel()
                 pendingSingleClick = nil
                 resetPane(pane)
-            }
-            return
-        }
-
-        if let pane = pane, pane.kind == .clock, settingsRect(for: pane).contains(loc) {
-            if event.clickCount == 1 {
-                pendingSingleClick?.cancel()
-                pendingSingleClick = nil
-                NotificationCenter.default.post(name: .openSettings, object: nil)
             }
             return
         }
@@ -1175,6 +1197,52 @@ class ClockWindow: NSWindow {
             .insetBy(dx: -controlHitPadding, dy: -controlHitPadding)
     }
 
+    // Which pane hosts the small controls. Horizontal: the first pane carries
+    // settings (top-left) and the layout switch (bottom-left); the middle pane
+    // carries the centre-at-top action. Vertical keeps the pair on the clock.
+    private var settingsControlPane: OverlayPaneKind? {
+        ClockSettings.shared.verticalLayout ? .clock : paneHitAreas.first?.kind
+    }
+
+    private var layoutControlPane: OverlayPaneKind? {
+        ClockSettings.shared.verticalLayout ? .clock : paneHitAreas.first?.kind
+    }
+
+    private var centerControlPane: OverlayPaneKind { .primary }
+
+    private func settingsRect(for pane: PaneHitArea) -> NSRect {
+        let s = ClockSettings.shared
+        if s.verticalLayout {
+            var rect = resetRect(for: pane)
+            rect.origin.x -= 14 + 4
+            return rect
+        }
+        return NSRect(x: pane.frame.minX + controlInset,
+                      y: pane.frame.maxY - controlInset - controlSize,
+                      width: controlSize,
+                      height: controlSize)
+            .insetBy(dx: -controlHitPadding, dy: -controlHitPadding)
+    }
+
+    private func layoutRect(for pane: PaneHitArea) -> NSRect {
+        let s = ClockSettings.shared
+        if s.verticalLayout { return resetRect(for: pane) }
+        let extra: CGFloat = NSScreen.screens.count > 1 ? controlSize + 6 : 0
+        return NSRect(x: pane.frame.minX + controlInset + extra,
+                      y: pane.frame.minY + controlInset,
+                      width: controlSize,
+                      height: controlSize)
+            .insetBy(dx: -controlHitPadding, dy: -controlHitPadding)
+    }
+
+    private func centerRect(for pane: PaneHitArea) -> NSRect {
+        NSRect(x: pane.frame.minX + controlInset,
+               y: pane.frame.minY + controlInset,
+               width: controlSize,
+               height: controlSize)
+            .insetBy(dx: -controlHitPadding, dy: -controlHitPadding)
+    }
+
     private func resetRect(for pane: PaneHitArea) -> NSRect {
         // The last horizontal pane leaves room for the click-through button in
         // the corner. In the vertical strip that button sits outside.
@@ -1201,19 +1269,11 @@ class ClockWindow: NSWindow {
             .insetBy(dx: -controlHitPadding, dy: -controlHitPadding)
     }
 
-    private func settingsRect(for pane: PaneHitArea) -> NSRect {
-        let vertical = ClockSettings.shared.verticalLayout
-        let size: CGFloat = vertical ? 14 : controlSize
-        var rect = resetRect(for: pane)
-        rect.origin.x -= size + (vertical ? 4 : 6)
-        return rect
-    }
-
     private func hasResetControl(_ pane: PaneHitArea) -> Bool {
         switch pane.kind {
         case .workTime: return true
         case .primary:  return ClockSettings.shared.overlayMode != .clock
-        case .clock:    return true
+        case .clock:    return ClockSettings.shared.verticalLayout
         }
     }
 
@@ -1248,6 +1308,7 @@ class ClockWindow: NSWindow {
 
     private func toggleTimerOrStopwatch() {
         let tc = TimeController.shared
+        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
         switch ClockSettings.shared.overlayMode {
         case .timer:
             switch tc.timerState {
