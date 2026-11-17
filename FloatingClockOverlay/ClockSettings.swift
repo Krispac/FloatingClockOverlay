@@ -209,6 +209,59 @@ final class ClockSettings: ObservableObject {
         } else {
             d.removeObject(forKey: "workStartOverride")
         }
+
+        // The app only sees a wake while it is running. A relaunch later in the
+        // day would otherwise start counting from that relaunch, so recover the
+        // machine's first full wake from the power log.
+        refreshWorkSessionStartFromSystemLog()
+    }
+
+    /// Asks the power log for the first full wake (or boot) of today and moves
+    /// the session start there when that is earlier than what we have.
+    func refreshWorkSessionStartFromSystemLog(now: Date = Date()) {
+        let key = Self.dayKey(now)
+        DispatchQueue.global(qos: .utility).async {
+            guard let wake = Self.firstSystemWakeToday(dayKey: key) else { return }
+            DispatchQueue.main.async {
+                guard wake <= Date(),
+                      Calendar.current.isDate(wake, inSameDayAs: Date())
+                else { return }
+                if self.workSessionStart > wake {
+                    self.workSessionStart = wake
+                }
+            }
+        }
+    }
+
+    private static func firstSystemWakeToday(dayKey: String) -> Date? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
+        process.arguments = ["-g", "log"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard let text = String(data: data, encoding: .utf8) else { return nil }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+
+        let wakePattern = #"\sWake\s+Wake from"#
+        let bootPattern = #"\sStart\s+powerd process is started"#
+        var earliest: Date?
+        for line in text.split(separator: "\n") where line.hasPrefix(dayKey) {
+            // DarkWake lines are maintenance wakes and must not start the day.
+            let isFullWake = line.range(of: wakePattern, options: .regularExpression) != nil
+            let isBoot = line.range(of: bootPattern, options: .regularExpression) != nil
+            guard isFullWake || isBoot else { continue }
+            guard let date = formatter.date(from: String(line.prefix(19))) else { continue }
+            if earliest == nil || date < earliest! { earliest = date }
+        }
+        return earliest
     }
 
     private func setupPersistence() {
