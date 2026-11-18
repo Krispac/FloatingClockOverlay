@@ -39,6 +39,7 @@ final class TimeController: ObservableObject {
         let d = settingsDuration
         timerRemaining       = d
         timerPausedRemaining = d
+        restoreTimerIfNeeded()
 
         tickSink = Timer.publish(every: 0.1, on: .main, in: .common)
             .autoconnect()
@@ -52,6 +53,52 @@ final class TimeController: ObservableObject {
             }
 
         requestNotificationPermission()
+    }
+
+    /// One-shot handoff used when the app is replaced while a timer is active.
+    /// The deploy helper writes the current state before relaunching; the new
+    /// process consumes it here and removes it so a normal launch stays clean.
+    private func restoreTimerIfNeeded() {
+        let d = UserDefaults.standard
+        guard let payload = d.dictionary(forKey: "timerRestore"),
+              let state = payload["state"] as? String
+        else { return }
+        d.removeObject(forKey: "timerRestore")
+
+        let remaining = max(0, (payload["remaining"] as? Double) ?? 0)
+        let overtime = max(0, (payload["overtime"] as? Double) ?? 0)
+        switch state {
+        case "running":
+            timerPausedRemaining = remaining
+            timerRemaining = remaining
+            timerEndDate = Date().addingTimeInterval(remaining)
+            timerState = .running
+        case "paused":
+            timerPausedRemaining = remaining
+            timerRemaining = remaining
+            timerState = .paused
+        case "finished":
+            timerRemaining = 0
+            timerFinishedAt = Date().addingTimeInterval(-overtime)
+            timerOvertime = overtime
+            timerState = .finished
+        case "breakRunning":
+            breakPausedRemaining = remaining
+            timerRemaining = remaining
+            breakEndDate = Date().addingTimeInterval(remaining)
+            timerState = .breakRunning
+        case "breakPaused":
+            breakPausedRemaining = remaining
+            timerRemaining = remaining
+            timerState = .breakPaused
+        default:
+            break
+        }
+
+        #if DEBUG
+        d.set(state, forKey: "timerRestoreAppliedState")
+        d.set(remaining, forKey: "timerRestoreAppliedRemaining")
+        #endif
     }
 
     private func tick() {
