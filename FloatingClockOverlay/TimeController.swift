@@ -22,6 +22,7 @@ final class TimeController: ObservableObject {
     private var timerPausedRemaining:   TimeInterval = 0
     private var breakEndDate:           Date?
     private var breakPausedRemaining:   TimeInterval = 0
+    private var overdueGongPlayed       = false
 
     // MARK: - Stopwatch
     @Published private(set) var stopwatchState:   StopwatchRunState = .idle
@@ -67,6 +68,7 @@ final class TimeController: ObservableObject {
 
         let remaining = max(0, (payload["remaining"] as? Double) ?? 0)
         let overtime = max(0, (payload["overtime"] as? Double) ?? 0)
+        overdueGongPlayed = false
         switch state {
         case "running":
             timerPausedRemaining = remaining
@@ -112,6 +114,7 @@ final class TimeController: ObservableObject {
                 timerFinishedAt      = Date()
                 timerOvertime        = 0
                 timerState           = .finished
+                overdueGongPlayed    = false
                 sendTimerNotification()
                 if ClockSettings.shared.timerSoundEnabled {
                     GentleGong.shared.play()
@@ -128,6 +131,17 @@ final class TimeController: ObservableObject {
             }
         } else if timerState == .finished, let finished = timerFinishedAt {
             timerOvertime = Date().timeIntervalSince(finished)
+            if !overdueGongPlayed, timerOvertime >= 15 * 60 {
+                overdueGongPlayed = true
+                if ClockSettings.shared.timerSoundEnabled {
+                    GentleGong.shared.playOverdue()
+                }
+                #if DEBUG
+                let d = UserDefaults.standard
+                d.set(d.integer(forKey: "overdueGongTriggeredCount") + 1,
+                      forKey: "overdueGongTriggeredCount")
+                #endif
+            }
         }
         // Stopwatch
         if stopwatchState == .running, let start = stopwatchStartDate {
@@ -139,6 +153,7 @@ final class TimeController: ObservableObject {
 
     func timerStart() {
         guard timerState == .idle || timerState == .paused else { return }
+        overdueGongPlayed = false
         if timerState == .idle {
             // Read the fields at the moment of starting, not a value cached
             // before the last edit was committed by the text field.
@@ -163,6 +178,7 @@ final class TimeController: ObservableObject {
         timerOvertime        = 0
         breakEndDate         = nil
         breakPausedRemaining = 0
+        overdueGongPlayed    = false
         let d                = settingsDuration
         timerPausedRemaining = d
         timerRemaining       = d
@@ -179,6 +195,7 @@ final class TimeController: ObservableObject {
         timerRemaining       = d
         timerFinishedAt      = nil
         timerOvertime        = 0
+        overdueGongPlayed    = false
         if wasFinished {
             timerState = .idle
             GentleGong.shared.stop()
@@ -205,6 +222,7 @@ final class TimeController: ObservableObject {
     // doing before the break begins.
     func breakStart() {
         guard timerState == .finished else { return }
+        overdueGongPlayed = false
         let duration = breakDuration
         guard duration > 0 else {
             timerReset()
@@ -240,6 +258,7 @@ final class TimeController: ObservableObject {
     private func finishBreak() {
         breakEndDate         = nil
         breakPausedRemaining = 0
+        overdueGongPlayed    = false
         let d                = settingsDuration
         timerPausedRemaining = d
         timerRemaining       = d
@@ -300,13 +319,17 @@ final class TimeController: ObservableObject {
 
 // MARK: - Gentle meditation gong
 
-// Two low, warm yoga-room gong strikes (A2) separated by ten seconds. Each
-// strike is built from a soft fundamental, a slowly beating twin and a few
-// quietly decaying partials. The sound is synthesised once in memory, so the
-// app carries no audio asset and nothing depends on the system alert sounds.
+// Low, warm yoga-room gong strikes (A2). The finish reminder uses two strikes
+// ten seconds apart. The overdue reminder uses the same strike twice one second
+// apart at 1.5x volume. Each strike is built from a soft fundamental, a slowly
+// beating twin and a few quietly decaying partials. The sound is synthesised
+// once in memory, so the app carries no audio asset and nothing depends on the
+// system alert sounds.
 final class GentleGong {
     static let shared = GentleGong()
 
+    private let normalVolume: Float = 0.48
+    private let overdueVolume: Float = 0.72   // 1.5x normal
     private var sound: NSSound?
     private var secondStrike: DispatchWorkItem?
     private lazy var audioData = Self.makeWAVData()
@@ -315,21 +338,31 @@ final class GentleGong {
 
     func play() {
         stop()
-        playStrike()
+        playStrike(volume: normalVolume)
+        scheduleSecondStrike(after: 10, volume: normalVolume)
+    }
 
+    /// A clearer reminder that the grace period for starting a break is over.
+    func playOverdue() {
+        stop()
+        playStrike(volume: overdueVolume)
+        scheduleSecondStrike(after: 1, volume: overdueVolume)
+    }
+
+    private func scheduleSecondStrike(after delay: TimeInterval, volume: Float) {
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.secondStrike = nil
-            self.playStrike()
+            self.playStrike(volume: volume)
         }
         secondStrike = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
-    private func playStrike() {
+    private func playStrike(volume: Float) {
         sound?.stop()
         guard let sound = NSSound(data: audioData) else { return }
-        sound.volume = 0.48
+        sound.volume = volume
         sound.play()
         self.sound = sound
     }
