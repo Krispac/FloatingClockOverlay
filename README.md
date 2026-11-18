@@ -25,10 +25,11 @@ A polished, transparent always-on-top clock overlay for macOS — built with Swi
 - **4 size presets:** Small, Medium, Large, Extra Large + free resize
 - **Timer** and **Stopwatch** modes with lap support
 - Optional pair of low meditation gong strikes, 10 seconds apart, when the timer or break ends
+- If the break has not started after 15 minutes of overtime, a second reminder uses two closer strikes, 1 second apart and 50% louder
 - Click-to-start break after the timer, with pause/resume and a 5-minute default
 - Silent macOS notification when the countdown timer finishes
 - **Three joined panes:** work time, primary timer/stopwatch, and side clock
-- **Work-time pane:** `6:45 h` since the persisted first app launch or full screen wake of the day, with a one-click **Start now** override for the current day, rounded down to full 15 minutes
+- **Work-time pane:** `6:45 h` since the first wake or display activation of the day, with a one-click **Start now** override for the current day, rounded down to full 15 minutes
 - **Vertical layout:** the joined panes become a narrow strip (narrower than the horizontal bar is high), with every value stacked — hours over minutes, and hours/minutes/seconds for the timer — keeping the `h` and labels the horizontal pane already shows
 - **Snap to Top Center:** one click moves the joined panes to the top edge, horizontally centered on the current display
 - **Adaptive Color** — auto-adjusts text color based on background brightness
@@ -130,7 +131,9 @@ Display decisions are logged to `~/Library/Logs/FloatingClockOverlay-position.lo
 the wrong screen.
 
 When a countdown reaches zero, the overlay blinks and counts **up** the delay
-until you click it to start the break, so a postponed break is visible.
+until you click it to start the break, so a postponed break is visible. At
+15:00 of overtime a louder, closer double gong marks the end of the grace
+period.
 
 The eye button in the bottom-right corner toggles click-through. It sits in its
 own panel, so it keeps working while the clock itself ignores the mouse.
