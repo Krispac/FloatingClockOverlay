@@ -212,16 +212,17 @@ final class ClockSettings: ObservableObject {
 
         // The app only sees a wake while it is running. A relaunch later in the
         // day would otherwise start counting from that relaunch, so recover the
-        // machine's first full wake from the power log.
+        // first real start of the day from the power log. When the Mac stayed
+        // awake overnight, the first display-on is used instead of a wake.
         refreshWorkSessionStartFromSystemLog()
     }
 
-    /// Asks the power log for the first full wake (or boot) of today and moves
-    /// the session start there when that is earlier than what we have.
+    /// Asks the power log for the first real start of today and moves the
+    /// session start there when that is earlier than what we have.
     func refreshWorkSessionStartFromSystemLog(now: Date = Date()) {
         let key = Self.dayKey(now)
         DispatchQueue.global(qos: .utility).async {
-            guard let wake = Self.firstSystemWakeToday(dayKey: key) else { return }
+            guard let wake = Self.firstSystemStartToday(dayKey: key) else { return }
             DispatchQueue.main.async {
                 guard wake <= Date(),
                       Calendar.current.isDate(wake, inSameDayAs: Date())
@@ -233,7 +234,7 @@ final class ClockSettings: ObservableObject {
         }
     }
 
-    private static func firstSystemWakeToday(dayKey: String) -> Date? {
+    private static func firstSystemStartToday(dayKey: String) -> Date? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
         process.arguments = ["-g", "log"]
@@ -252,16 +253,27 @@ final class ClockSettings: ObservableObject {
 
         let wakePattern = #"\sWake\s+Wake from"#
         let bootPattern = #"\sStart\s+powerd process is started"#
-        var earliest: Date?
+        let displayOnPattern = #"\sNotification\s+Display is turned on"#
+        var earliestWakeOrBoot: Date?
+        var earliestDisplayOn: Date?
         for line in text.split(separator: "\n") where line.hasPrefix(dayKey) {
             // DarkWake lines are maintenance wakes and must not start the day.
+            // A display-on is the fallback when the Mac stayed awake overnight
+            // and therefore has no full wake or boot event to report.
             let isFullWake = line.range(of: wakePattern, options: .regularExpression) != nil
             let isBoot = line.range(of: bootPattern, options: .regularExpression) != nil
-            guard isFullWake || isBoot else { continue }
+            let isDisplayOn = line.range(of: displayOnPattern, options: .regularExpression) != nil
+            guard isFullWake || isBoot || isDisplayOn else { continue }
             guard let date = formatter.date(from: String(line.prefix(19))) else { continue }
-            if earliest == nil || date < earliest! { earliest = date }
+            if isFullWake || isBoot {
+                if earliestWakeOrBoot == nil || date < earliestWakeOrBoot! {
+                    earliestWakeOrBoot = date
+                }
+            } else if earliestDisplayOn == nil || date < earliestDisplayOn! {
+                earliestDisplayOn = date
+            }
         }
-        return earliest
+        return earliestWakeOrBoot ?? earliestDisplayOn
     }
 
     private func setupPersistence() {
