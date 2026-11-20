@@ -25,7 +25,7 @@ A polished, transparent always-on-top clock overlay for macOS — built with Swi
 - **4 size presets:** Small, Medium, Large, Extra Large + free resize
 - **Timer** and **Stopwatch** modes with lap support
 - Optional pair of low meditation gong strikes, 10 seconds apart, when the timer or break ends
-- If the break has not started after 15 minutes of overtime, a second reminder uses two closer strikes, 1 second apart and 50% louder
+- If the break has not started after 15 minutes of overtime, a second reminder uses two closer strikes, 7 seconds apart so the first can ring out, and 50% louder
 - Click-to-start break after the timer, with pause/resume and a 5-minute default
 - Silent macOS notification when the countdown timer finishes
 - **Three joined panes:** work time, primary timer/stopwatch, and side clock

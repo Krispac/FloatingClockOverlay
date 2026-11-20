@@ -320,11 +320,12 @@ final class TimeController: ObservableObject {
 // MARK: - Gentle meditation gong
 
 // Low, warm yoga-room gong strikes (A2). The finish reminder uses two strikes
-// ten seconds apart. The overdue reminder uses the same strike twice one second
-// apart at 1.5x volume. Each strike is built from a soft fundamental, a slowly
-// beating twin and a few quietly decaying partials. The sound is synthesised
-// once in memory, so the app carries no audio asset and nothing depends on the
-// system alert sounds.
+// ten seconds apart. The overdue reminder uses the same strike twice seven
+// seconds apart, so the first strike rings out before the second starts, at
+// 1.5x volume. Each strike is built from a soft fundamental, a slowly beating
+// twin and a few quietly decaying partials. The sound is synthesised once in
+// memory, so the app carries no audio asset and nothing depends on the system
+// alert sounds.
 final class GentleGong {
     static let shared = GentleGong()
 
@@ -346,7 +347,7 @@ final class GentleGong {
     func playOverdue() {
         stop()
         playStrike(volume: overdueVolume)
-        scheduleSecondStrike(after: 1, volume: overdueVolume)
+        scheduleSecondStrike(after: 7, volume: overdueVolume)
     }
 
     private func scheduleSecondStrike(after delay: TimeInterval, volume: Float) {
